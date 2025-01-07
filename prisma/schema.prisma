@@ -1,0 +1,47 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model ApiToken {
+  id            Int       @id @default(autoincrement())
+  token         String    @unique
+  createdAt     DateTime  @default(now())
+  invalidatedAt DateTime?
+}
+
+model DiscordUser {
+  discordId String   @id
+  createdAt DateTime @default(now())
+
+  creationAllowed Boolean @default(true)
+  updateAllowed   Boolean @default(true)
+  deleteAllowed   Boolean @default(true)
+}
+
+model Status {
+  id           Int           @id @default(autoincrement())
+  guildId      String
+  channelId    String        @unique
+  online       Boolean
+  maintenance  Boolean
+  serverUUID   String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  playerCounts PlayerCount[]
+}
+
+model PlayerCount {
+  id          Int      @id @default(autoincrement())
+  status      Status   @relation(fields: [statusId], references: [id])
+  statusId    Int
+  playerCount Int
+  createdAt   DateTime @default(now())
+}

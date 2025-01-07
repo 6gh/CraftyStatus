@@ -1,0 +1,34 @@
+{
+  "name": "craftystatus",
+  "version": "1.0.0",
+  "description": "A Discord bot to show real-time statuses of Minecraft servers hosted with Crafty Controller",
+  "main": "index.js",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "tsc": "tsc",
+    "prisma": "prisma",
+    "tsx": "tsx"
+  },
+  "keywords": [
+    "minecraft",
+    "discord",
+    "bot",
+    "status"
+  ],
+  "author": "6gh",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "eslint": "^9.17.0",
+    "prisma": "^6.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@prisma/client": "6.1.0",
+    "axios": "^1.7.9",
+    "discord.js": "^14.17.2",
+    "dotenv": "^16.4.7"
+  }
+}
