@@ -1,5 +1,5 @@
 import { Message } from "discord.js";
-import { CommandResult } from "../types/command.js";
+import { CommandArguments, CommandResult } from "../types/command.js";
 
 export class TextCommand {
   name: string;
@@ -14,7 +14,7 @@ export class TextCommand {
   }
 }
 
-interface TextCommandArguments {
+interface TextCommandArguments extends CommandArguments {
   message: Message;
   args: string[];
 }

@@ -27,15 +27,19 @@ model DiscordUser {
 }
 
 model Status {
-  id           Int           @id @default(autoincrement())
-  guildId      String
-  channelId    String        @unique
-  online       Boolean
-  maintenance  Boolean
-  serverUUID   String
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  playerCounts PlayerCount[]
+  id             Int           @id @default(autoincrement())
+  channelId      String
+  messageId      String        @unique
+  online         Boolean
+  maintenance    Boolean
+  serverId       String
+  serverName     String
+  serverVersion  String
+  serverIp       String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  playerCounts   PlayerCount[]
+  showMaxPlayers Boolean       @default(false)
 }
 
 model PlayerCount {
@@ -43,5 +47,7 @@ model PlayerCount {
   status      Status   @relation(fields: [statusId], references: [id])
   statusId    Int
   playerCount Int
+  maxPlayers  Int
+  players     String
   createdAt   DateTime @default(now())
 }

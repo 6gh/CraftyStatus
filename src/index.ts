@@ -1,12 +1,25 @@
 import { PrismaClient } from "@prisma/client";
 import axios from "axios";
 import "dotenv/config";
-import { AllServersGet, AuthLoginPost } from "./types/craftyapi.js";
-import { ActivityType, Client, Collection } from "discord.js";
+import {
+  AllServersGet,
+  AuthLoginPost,
+  ServerStatusGet,
+} from "./types/craftyapi.js";
+import {
+  ActivityType,
+  Client,
+  Collection,
+  EmbedBuilder,
+  MessageFlags,
+} from "discord.js";
 import { readdirSync } from "fs";
 import path from "path";
 import { SlashCommand } from "./classes/slashcommand.js";
 import { TextCommand } from "./classes/textcommand.js";
+import { schedule } from "node-cron";
+import { createPlayerCountChart } from "./utils/createChart.js";
+import { offlineColor, onlineColor } from "./utils/consts.js";
 
 //ANCHOR - Setup crafty API
 
@@ -159,71 +172,76 @@ bot.on("ready", () => {
 });
 
 //ANCHOR - Setup commands
-
-const slashCommands = new Collection<string, SlashCommand>();
+export const slashCommands = new Collection<string, SlashCommand>();
 const textCommands = new Collection<string, TextCommand>();
 
-const slashCommandDirFiles = readdirSync(
-  path.join(import.meta.dirname, "commands", "slash")
-);
+// kept getting Warning: Detected unsettled top-level await
+// so i wrapped it in an async function
+(async () => {
+  const slashCommandDirFiles = readdirSync(
+    path.join(import.meta.dirname, "commands", "slash")
+  );
 
-for (const file of slashCommandDirFiles) {
-  try {
-    const command = (await import(`./commands/slash/${file}`))
-      ?.default as SlashCommand;
+  for (const file of slashCommandDirFiles) {
+    try {
+      const { default: command } = await import(`./commands/slash/${file}`);
 
-    if (command) {
-      if (command.data) {
-        slashCommands.set(command.data.name, command);
-        console.log(`Loaded slash command ${file}`);
-        continue;
+      if (command instanceof SlashCommand) {
+        if (command.data) {
+          slashCommands.set(command.data.name, command);
+          console.log(`Loaded slash command ${file}`);
+          continue;
+        }
       }
-    }
 
-    console.warn(`Command ${file} is invalid`);
-  } catch (error) {
-    console.warn(`Failed to load command ${file}: ${error}`);
-  }
-}
-
-const textCommandDirFiles = readdirSync(
-  path.join(import.meta.dirname, "commands", "text")
-);
-
-for (const file of textCommandDirFiles) {
-  try {
-    const command = (await import(`./commands/text/${file}`))
-      ?.default as TextCommand;
-
-    if (command) {
-      if (command.name) {
-        textCommands.set(command.name, command);
-        console.log(`Loaded text command ${file}`);
-        continue;
+      console.warn(`Command ${file} is invalid`);
+    } catch (error) {
+      console.warn(`Failed to load command ${file}: ${error}`);
+      if (process.env.NODE_ENV === "development") {
+        console.error(error);
       }
+      continue;
     }
-
-    console.warn(`Command ${file} is invalid`);
-  } catch (error) {
-    console.warn(`Failed to load command ${file}: ${error}`);
   }
-}
+
+  const textCommandDirFiles = readdirSync(
+    path.join(import.meta.dirname, "commands", "text")
+  );
+
+  for (const file of textCommandDirFiles) {
+    try {
+      const { default: command } = await import(`./commands/text/${file}`);
+
+      if (command instanceof TextCommand) {
+        if (command.name) {
+          textCommands.set(command.name, command);
+          console.log(`Loaded text command ${file}`);
+          continue;
+        }
+      }
+
+      console.warn(`Command ${file} is invalid`);
+      continue;
+    } catch (error) {
+      console.warn(`Failed to load command ${file}: ${error}`);
+      if (process.env.NODE_ENV === "development") {
+        console.error(error);
+      }
+      continue;
+    }
+  }
+})();
 
 bot.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
-  try {
-    const dbUser = await $client.discordUser.findFirst({
-      where: {
-        discordId: message.author.id,
-      },
-    });
+  const dbUser = await $client.discordUser.findFirst({
+    where: {
+      discordId: message.author.id,
+    },
+  });
 
-    if (!dbUser) return;
-  } catch (error) {
-    console.error(error);
-    await message.reply("There was an error trying to execute that command!");
-  }
+  if (!dbUser) return;
 
   const prefix = process.env.DISCORD_PREFIX || "cs!";
 
@@ -238,11 +256,42 @@ bot.on("messageCreate", async (message) => {
 
   if (textCommand) {
     try {
-      await textCommand.execute({ message, args });
+      await textCommand.execute({ message, args, dbUser });
     } catch (error) {
       console.error(error);
       await message.reply("There was an error trying to execute that command!");
     }
+  }
+});
+
+bot.on("interactionCreate", async (interaction) => {
+  if (!interaction.isCommand()) return;
+
+  const command = slashCommands.get(interaction.commandName);
+
+  if (!command) return;
+
+  const dbUser = await $client.discordUser.findUnique({
+    where: {
+      discordId: interaction.user.id,
+    },
+  });
+
+  if (!dbUser) {
+    await interaction.reply({
+      content: "You are not allowed to use this bot",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  try {
+    await command.execute({ interaction, dbUser });
+  } catch (error) {
+    console.error(error);
+    await interaction.reply(
+      "There was an error trying to execute that command!"
+    );
   }
 });
 
@@ -265,4 +314,212 @@ await $client.discordUser.upsert({
   },
 });
 
-bot.login(process.env.DISCORD_TOKEN);
+await bot.login(process.env.DISCORD_TOKEN);
+
+schedule("*/1 * * * *", async () => {
+  console.log("Running cron job | Checking embed to update");
+
+  const statuses = await $client.status.findMany({
+    where: {
+      updatedAt: {
+        lte: new Date(Date.now() - 1000 * 60 * 0.5), // 5 minutes
+      },
+    },
+  });
+
+  // get api token
+  const token = await $client.apiToken.findFirst({
+    where: {
+      invalidatedAt: null,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  if (!token) {
+    throw new Error("No valid token found");
+  }
+
+  for (const status of statuses) {
+    try {
+      const channel = await bot.channels.fetch(status.channelId);
+
+      if (!channel || !channel.isTextBased() || !channel.isSendable()) {
+        console.warn(
+          `Channel ${status.channelId} not found! Will reattempt next time...`
+        );
+        continue;
+      }
+
+      let message = status.messageId
+        ? await channel.messages.fetch(status.messageId)
+        : (await channel.messages.fetch({ limit: 30 }))
+            ?.filter((msg) => msg.author.id === bot.user?.id)
+            .sort((a, b) => b.createdTimestamp - a.createdTimestamp);
+
+      if (message instanceof Collection) {
+        const msg = message.first();
+
+        if (message.size > 1) {
+          console.warn(
+            `Found ${message.size} messages by the bot in the channel ${channel.id}. Assuming it is the newest one!`
+          );
+        }
+
+        if (!msg) {
+          console.warn("No message found! Will reattempt next time...");
+          continue;
+        }
+
+        message = msg;
+
+        await $client.status.update({
+          where: {
+            id: status.id,
+          },
+          data: {
+            messageId: message.id,
+          },
+        });
+      }
+
+      // now get the server status
+      const res = await axios.get(
+        `${process.env.CRAFTY_BASE_URL}/api/v2/servers/${status.serverId}/stats`,
+        {
+          headers: {
+            Authorization: `bearer ${token.token}`,
+          },
+        }
+      );
+
+      const server = res.data as ServerStatusGet;
+
+      if (server.status !== "ok") {
+        console.warn("Server not found, or an error occurred");
+        continue;
+      }
+
+      const serverStatus = server.data;
+
+      // create the db entry
+      const currentStatus = await $client.status.update({
+        where: {
+          id: status.id,
+        },
+        data: {
+          serverId: serverStatus.server_id.server_id,
+          serverName: serverStatus.server_id.server_name,
+          serverVersion: serverStatus.version.replace(/[^0-9\.]/gm, ""),
+          maintenance: false,
+          online: serverStatus.running,
+          playerCounts: {
+            create: {
+              playerCount: serverStatus.online,
+              players: serverStatus.players,
+              maxPlayers: serverStatus.max,
+            },
+          },
+          updatedAt: new Date(),
+        },
+        include: {
+          playerCounts: {
+            take: 1,
+            orderBy: {
+              createdAt: "desc",
+            },
+          },
+        },
+      });
+
+      // get the last 24-hour player count
+      const playerCounts = await $client.playerCount.findMany({
+        where: {
+          statusId: status.id,
+          createdAt: {
+            gte: new Date(Date.now() - 1000 * 60 * 60 * 24),
+          },
+        },
+        orderBy: {
+          createdAt: "asc",
+        },
+      });
+
+      // create the chart
+      const chart = await createPlayerCountChart(
+        playerCounts,
+        currentStatus.online,
+        [
+          currentStatus.showMaxPlayers,
+          currentStatus.showMaxPlayers
+            ? currentStatus.playerCounts[0].maxPlayers
+            : -1,
+        ]
+      );
+
+      // create the embed
+      const embed = new EmbedBuilder()
+        .setTitle(`${currentStatus.serverName} Status`)
+        .setDescription(
+          `Server is currently ${currentStatus.online ? "online" : "offline"}`
+        )
+        .setColor(currentStatus.online ? onlineColor : offlineColor)
+        .setFooter({
+          text: "Last updated",
+        })
+        .setTimestamp(Date.now());
+
+      if (currentStatus.serverIp) {
+        embed.addFields([
+          {
+            name: "Server IP",
+            value: `\`${currentStatus.serverIp}\``,
+            inline: true,
+          },
+        ]);
+      }
+
+      const playerList = (
+        JSON.parse(
+          currentStatus.playerCounts[0].players.replace(/'/g, '"')
+        ) as string[]
+      ).join("\n");
+
+      embed.addFields([
+        {
+          name: "Server Version",
+          value: `\`${currentStatus.serverVersion}\``,
+          inline: true,
+        },
+        {
+          name: "Player Count",
+          value: `\`${currentStatus.playerCounts[0].playerCount} players online\``,
+          inline: true,
+        },
+        {
+          name: "Online Players",
+          value:
+            currentStatus.playerCounts[0].playerCount > 0
+              ? `\`\`\`${playerList}\`\`\``
+              : "```No players online```",
+        },
+      ]);
+
+      if (chart) {
+        embed.setImage(`attachment://player-count-chart.png`);
+      }
+
+      message.edit({
+        embeds: [embed],
+        files: chart
+          ? [{ name: "player-count-chart.png", attachment: chart }]
+          : undefined,
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  console.log("Cron job finished");
+});
