@@ -1,6 +1,6 @@
 declare namespace NodeJS {
   interface ProcessEnv {
-    NODE_ENV: "development" | "production";
+    NODE_ENV: "development" | "production" | "silent";
     DISCORD_TOKEN: string;
     DISCORD_OWNER_ID: string;
     DISCORD_PREFIX: string;

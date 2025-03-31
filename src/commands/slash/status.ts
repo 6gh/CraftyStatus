@@ -11,6 +11,7 @@ import { $client } from "../../index.js";
 import { ServerStatusGet } from "../../types/craftyapi.js";
 import { createPlayerCountChart } from "../../utils/createChart.js";
 import { createEmbed } from "../../utils/createEmbed.js";
+import logger from "../../utils/logger.js";
 
 export default new SlashCommand(
   new SlashCommandBuilder()
@@ -250,7 +251,7 @@ export default new SlashCommand(
               content: "Status embed created",
             });
           } catch (error) {
-            console.error(error);
+            logger.error(error);
             await interaction.reply({
               content: "Failed to get server",
               flags: MessageFlags.Ephemeral,
@@ -295,7 +296,6 @@ export default new SlashCommand(
           });
           return;
         }
-        console.log(messageId.value);
 
         if (!userProvidedJavaIp?.value && showMaxPlayers?.value === undefined) {
           await interaction.reply({
@@ -422,7 +422,7 @@ export default new SlashCommand(
           const msg = await channel.messages.fetch(dbStatus.messageId);
 
           if (!msg) {
-            console.warn("Message not found. Creating new message");
+            logger.warn("Message not found. Creating new message");
             await interaction.channel.send({
               embeds: [embed],
               files: chart
@@ -468,7 +468,7 @@ export default new SlashCommand(
               : "Original status embed could not be found. A new status embed was created",
           });
         } catch (error) {
-          console.error(error);
+          logger.error(error);
           await interaction.reply({
             content: "Failed to update server",
             flags: MessageFlags.Ephemeral,

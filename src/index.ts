@@ -8,6 +8,7 @@ import {
 } from "./types/craftyapi.js";
 import {
   ActivityType,
+  ChannelType,
   Client,
   Collection,
   EmbedBuilder,
@@ -20,6 +21,7 @@ import { TextCommand } from "./classes/textcommand.js";
 import { schedule } from "node-cron";
 import { createPlayerCountChart } from "./utils/createChart.js";
 import { createEmbed } from "./utils/createEmbed.js";
+import logger from "./utils/logger.js";
 
 //ANCHOR - Setup crafty API
 
@@ -35,6 +37,8 @@ export const $client = new PrismaClient({
   log:
     process.env.NODE_ENV === "development"
       ? ["error", "info", "query", "warn"]
+      : process.env.NODE_ENV === "production"
+      ? ["error", "info", "warn"]
       : ["error", "warn"],
 });
 
@@ -53,7 +57,7 @@ try {
   const data = res.data as AllServersGet;
 
   if (data.status === "ok") {
-    console.log(
+    logger.info(
       `API Key is working! I have access to ${data.data.length} servers`
     );
   } else {
@@ -62,7 +66,7 @@ try {
     );
   }
 } catch (error) {
-  console.error(error);
+  logger.error(error);
   throw new Error(
     "Unknown error occurred while trying to authenticate with CRAFTY_API_KEY"
   );
@@ -94,9 +98,9 @@ export const bot = new Client({
 });
 
 bot.on("ready", () => {
-  console.log(`Logged in as ${bot.user?.tag}`);
+  logger.info(`Logged in as ${bot.user?.tag}`);
 
-  console.log(
+  logger.info(
     `Invite with: https://discord.com/oauth2/authorize?client_id=${bot.application?.id}&permissions=536964096&integration_type=0&scope=bot+applications.commands`
   );
 });
@@ -119,16 +123,16 @@ const textCommands = new Collection<string, TextCommand>();
       if (command instanceof SlashCommand) {
         if (command.data) {
           slashCommands.set(command.data.name, command);
-          console.log(`Loaded slash command ${file}`);
+          logger.debug(`Loaded slash command ${file}`);
           continue;
         }
       }
 
-      console.warn(`Command ${file} is invalid`);
+      logger.warn(`Command ${file} is invalid`);
     } catch (error) {
-      console.warn(`Failed to load command ${file}: ${error}`);
+      logger.warn(`Failed to load command ${file}: ${error}`);
       if (process.env.NODE_ENV === "development") {
-        console.error(error);
+        logger.error(error);
       }
       continue;
     }
@@ -145,21 +149,25 @@ const textCommands = new Collection<string, TextCommand>();
       if (command instanceof TextCommand) {
         if (command.name) {
           textCommands.set(command.name, command);
-          console.log(`Loaded text command ${file}`);
+          logger.debug(`Loaded text command ${file}`);
           continue;
         }
       }
 
-      console.warn(`Command ${file} is invalid`);
+      logger.warn(`Command ${file} is invalid`);
       continue;
     } catch (error) {
-      console.warn(`Failed to load command ${file}: ${error}`);
+      logger.warn(`Failed to load command ${file}: ${error}`);
       if (process.env.NODE_ENV === "development") {
-        console.error(error);
+        logger.error(error);
       }
       continue;
     }
   }
+
+  logger.info(
+    `Loaded commands | Slash: ${slashCommands.size} | Text: ${textCommands.size}`
+  );
 })();
 
 bot.on("messageCreate", async (message) => {
@@ -188,7 +196,7 @@ bot.on("messageCreate", async (message) => {
     try {
       await textCommand.execute({ message, args, dbUser });
     } catch (error) {
-      console.error(error);
+      logger.error(error);
       await message.reply("There was an error trying to execute that command!");
     }
   }
@@ -218,7 +226,7 @@ bot.on("interactionCreate", async (interaction) => {
   try {
     await command.execute({ interaction, dbUser });
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     await interaction.reply(
       "There was an error trying to execute that command!"
     );
@@ -247,7 +255,7 @@ await $client.discordUser.upsert({
 await bot.login(process.env.DISCORD_TOKEN);
 
 schedule("*/1 * * * *", async () => {
-  console.log("Running cron job | Checking embed to update");
+  logger.debug("Running scheduled task | Checking embed to update");
 
   const statuses = await $client.status.findMany({
     where: {
@@ -257,12 +265,19 @@ schedule("*/1 * * * *", async () => {
     },
   });
 
+  logger.debug(`Found ${statuses.length} statuses to update`);
+
   for (const status of statuses) {
     try {
       const channel = await bot.channels.fetch(status.channelId);
 
-      if (!channel || !channel.isTextBased() || !channel.isSendable()) {
-        console.warn(
+      if (
+        !channel ||
+        !channel.isTextBased() ||
+        !channel.isSendable() ||
+        channel.type !== ChannelType.GuildText
+      ) {
+        logger.warn(
           `Channel ${status.channelId} not found! Will reattempt next time...`
         );
         continue;
@@ -278,13 +293,13 @@ schedule("*/1 * * * *", async () => {
         const msg = message.first();
 
         if (message.size > 1) {
-          console.warn(
+          logger.warn(
             `Found ${message.size} messages by the bot in the channel ${channel.id}. Assuming it is the newest one!`
           );
         }
 
         if (!msg) {
-          console.warn("No message found! Will reattempt next time...");
+          logger.warn("No message found! Will reattempt next time...");
           continue;
         }
 
@@ -313,7 +328,7 @@ schedule("*/1 * * * *", async () => {
       const server = res.data as ServerStatusGet;
 
       if (server.status !== "ok") {
-        console.warn("Server not found, or an error occurred");
+        logger.warn("Server not found, or an error occurred");
         continue;
       }
 
@@ -386,10 +401,14 @@ schedule("*/1 * * * *", async () => {
           ? [{ name: "player-count-chart.png", attachment: chart }]
           : undefined,
       });
+
+      logger.debug(
+        `Updated status for https://discord.com/channels/${channel.guildId}/${channel.id}/${message.id}`
+      );
     } catch (error) {
-      console.error(error);
+      logger.error(error);
     }
   }
 
-  console.log("Cron job finished");
+  logger.debug("Cron job finished");
 });

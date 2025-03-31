@@ -67,22 +67,22 @@ export const createEmbed = async (
     },
   ]);
 
-  // console.log(currentStatus.playerCounts[0].players.replace(/'/g, '"'));
+  // logger.debug(currentStatus.playerCounts[0].players.replace(/'/g, '"'));
 
   let playerList: string[] | string = JSON.parse(
     currentStatus.playerCounts[0].players.replace(/'/g, '"')
   ) as string[];
   playerList = playerList.map((player) => player.replace(/"/g, ""));
-  // console.log(playerList);
+  // logger.debug(playerList);
 
   playerList = playerList.map((player) => player.replace(/^\./g, ""));
-  // console.log(playerList);
+  // logger.debug(playerList);
 
   playerList = playerList.sort((a, b) => a.localeCompare(b));
-  // console.log(playerList);
+  // logger.debug(playerList);
 
   playerList = playerList.join("\n");
-  // console.log(playerList);
+  // logger.debug(playerList);
 
   embed.addFields([
     {
