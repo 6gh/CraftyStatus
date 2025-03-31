@@ -1,0 +1,5 @@
+services:
+  crafty-status:
+    build:
+      context: .
+      dockerfile: Dockerfile

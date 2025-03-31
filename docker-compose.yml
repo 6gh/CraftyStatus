@@ -1,0 +1,22 @@
+services:
+  crafty-status:
+    image: crafty-status:latest
+    container_name: crafty-status
+    restart: unless-stopped
+    # ports:
+    #   - "5000:5000"
+    environment:
+      # Discord Bot
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - DISCORD_OWNER_ID=${DISCORD_OWNER_ID}
+      - DISCORD_PREFIX=${DISCORD_PREFIX:-cs!}
+
+      # Crafty Controller API
+      - CRAFTY_BASE_URL=${CRAFTY_BASE_URL}
+      - CRAFTY_USERNAME=${CRAFTY_USERNAME:-admin}
+      - CRAFTY_PASSWORD=${CRAFTY_PASSWORD}
+
+      # Database (optional)
+      # - DATABASE_URL="file:/opt/crafty-status/prod.db"
+    volumes:
+      - ./docker/crafty-status:/opt/crafty-status
