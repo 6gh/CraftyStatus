@@ -18,8 +18,7 @@ ENV DISCORD_TOKEN=
 ENV DISCORD_OWNER_ID=
 ENV DISCORD_PREFIX=cs!
 ENV CRAFTY_BASE_URL=
-ENV CRAFTY_USERNAME=
-ENV CRAFTY_PASSWORD=
+ENV CRAFTY_API_KEY=
 ENV DATABASE_URL="file:/opt/craftystatus/prod.db"
 
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile

@@ -142,25 +142,11 @@ export default new SlashCommand(
           });
 
           try {
-            // get api token
-            const token = await $client.apiToken.findFirst({
-              where: {
-                invalidatedAt: null,
-              },
-              orderBy: {
-                createdAt: "desc",
-              },
-            });
-
-            if (!token) {
-              throw new Error("No valid token found");
-            }
-
             const res = await axios.get(
               `${process.env.CRAFTY_BASE_URL}/api/v2/servers/${uuid.value}/stats`,
               {
                 headers: {
-                  Authorization: `bearer ${token.token}`,
+                  Authorization: `Bearer ${process.env.CRAFTY_API_KEY}`,
                 },
               }
             );
@@ -324,20 +310,6 @@ export default new SlashCommand(
         });
 
         try {
-          // get api token
-          const token = await $client.apiToken.findFirst({
-            where: {
-              invalidatedAt: null,
-            },
-            orderBy: {
-              createdAt: "desc",
-            },
-          });
-
-          if (!token) {
-            throw new Error("No valid token found");
-          }
-
           const dbStatus = await $client.status.findUnique({
             where: {
               messageId: messageId.value.toString(),
@@ -369,7 +341,7 @@ export default new SlashCommand(
             `${process.env.CRAFTY_BASE_URL}/api/v2/servers/${dbStatus.serverId}/stats`,
             {
               headers: {
-                Authorization: `bearer ${token.token}`,
+                Authorization: `Bearer ${process.env.CRAFTY_API_KEY}`,
               },
             }
           );

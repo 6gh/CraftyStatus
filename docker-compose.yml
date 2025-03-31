@@ -13,8 +13,6 @@ services:
 
       # Crafty Controller API
       - CRAFTY_BASE_URL=${CRAFTY_BASE_URL}
-      - CRAFTY_USERNAME=${CRAFTY_USERNAME:-admin}
-      - CRAFTY_PASSWORD=${CRAFTY_PASSWORD}
       - CRAFTY_API_KEY=${CRAFTY_API_KEY}
 
       # Database (optional)

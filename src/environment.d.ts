@@ -5,8 +5,7 @@ declare namespace NodeJS {
     DISCORD_OWNER_ID: string;
     DISCORD_PREFIX: string;
     CRAFTY_BASE_URL: string;
-    CRAFTY_USERNAME: string;
-    CRAFTY_PASSWORD: string;
+    CRAFTY_API_KEY: string;
     DATABASE_URL: string;
   }
 }

@@ -19,7 +19,6 @@ import { SlashCommand } from "./classes/slashcommand.js";
 import { TextCommand } from "./classes/textcommand.js";
 import { schedule } from "node-cron";
 import { createPlayerCountChart } from "./utils/createChart.js";
-import { offlineColor, onlineColor } from "./utils/consts.js";
 import { createEmbed } from "./utils/createEmbed.js";
 
 //ANCHOR - Setup crafty API
@@ -28,12 +27,8 @@ if (!process.env.CRAFTY_BASE_URL) {
   throw new Error("CRAFTY_BASE_URL is not defined");
 }
 
-if (!process.env.CRAFTY_USERNAME) {
-  throw new Error("CRAFTY_USERNAME is not defined");
-}
-
-if (!process.env.CRAFTY_PASSWORD) {
-  throw new Error("CRAFTY_PASSWORD is not defined");
+if (!process.env.CRAFTY_API_KEY) {
+  throw new Error("CRAFTY_API_KEY is not defined");
 }
 
 export const $client = new PrismaClient({
@@ -46,97 +41,31 @@ export const $client = new PrismaClient({
 // remove trailing slash
 process.env.CRAFTY_BASE_URL = process.env.CRAFTY_BASE_URL.replace(/\/$/, "");
 
-// try to get a valid token from the database
-let needToken = true;
-
 try {
-  const token = await $client.apiToken.findFirst({
-    where: {
-      invalidatedAt: null,
-    },
-    orderBy: {
-      createdAt: "desc",
+  // try to use the token
+
+  const res = await axios.get(`${process.env.CRAFTY_BASE_URL}/api/v2/servers`, {
+    headers: {
+      Authorization: `Bearer ${process.env.CRAFTY_API_KEY}`,
     },
   });
 
-  if (token) {
-    // try to use the token
+  const data = res.data as AllServersGet;
 
-    const res = await axios.get(
-      `${process.env.CRAFTY_BASE_URL}/api/v2/servers`,
-      {
-        headers: {
-          Authorization: `bearer ${token.token}`,
-        },
-      }
+  if (data.status === "ok") {
+    console.log(
+      `API Key is working! I have access to ${data.data.length} servers`
     );
-
-    const data = res.data as AllServersGet;
-
-    if (data.status === "ok") {
-      console.log(
-        `Found working token. I have access to ${data.data.length} servers`
-      );
-
-      needToken = false;
-    } else {
-      console.log(`Token is not working:\n${data.status}`);
-    }
+  } else {
+    throw new Error(
+      "CRAFTY_API_KEY is not working to authenticate. Please check the key"
+    );
   }
 } catch (error) {
   console.error(error);
-  process.exit(1);
-}
-
-if (needToken) {
-  // try to get a new token
-
-  console.log("Trying to get a new token...");
-
-  try {
-    const res = await axios.post(
-      `${process.env.CRAFTY_BASE_URL}/api/v2/auth/login`,
-      {
-        username: process.env.CRAFTY_USERNAME,
-        password: process.env.CRAFTY_PASSWORD,
-      }
-    );
-
-    const data = res.data as AuthLoginPost;
-
-    if (data.status === "ok") {
-      console.log("Got a new token. Testing...");
-      await $client.apiToken.create({
-        data: {
-          token: data.data.token,
-        },
-      });
-
-      const res = await axios.get(
-        `${process.env.CRAFTY_BASE_URL}/api/v2/servers`,
-        {
-          headers: {
-            Authorization: `bearer ${data.data.token}`,
-          },
-        }
-      );
-
-      const serversdata = res.data as AllServersGet;
-
-      if (serversdata.status === "ok") {
-        console.log(
-          `New token is working. I have access to ${serversdata.data.length} servers`
-        );
-      } else {
-        throw new Error(`New token is not working:\n${serversdata.status}`);
-      }
-    } else {
-      throw new Error(`${data.status} is not ok:\n${data.data}`);
-    }
-  } catch (error) {
-    console.error(error);
-    process.exit(1);
-  }
+  throw new Error(
+    "Unknown error occurred while trying to authenticate with CRAFTY_API_KEY"
+  );
 }
 
 //ANCHOR - Setup discord bot
@@ -328,20 +257,6 @@ schedule("*/1 * * * *", async () => {
     },
   });
 
-  // get api token
-  const token = await $client.apiToken.findFirst({
-    where: {
-      invalidatedAt: null,
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
-
-  if (!token) {
-    throw new Error("No valid token found");
-  }
-
   for (const status of statuses) {
     try {
       const channel = await bot.channels.fetch(status.channelId);
@@ -390,7 +305,7 @@ schedule("*/1 * * * *", async () => {
         `${process.env.CRAFTY_BASE_URL}/api/v2/servers/${status.serverId}/stats`,
         {
           headers: {
-            Authorization: `bearer ${token.token}`,
+            Authorization: `Bearer ${process.env.CRAFTY_API_KEY}`,
           },
         }
       );
