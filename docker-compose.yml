@@ -1,7 +1,7 @@
 services:
-  crafty-status:
-    image: crafty-status:latest
-    container_name: crafty-status
+  craftystatus:
+    image: craftystatus:latest
+    container_name: craftystatus
     restart: unless-stopped
     # ports:
     #   - "5000:5000"
@@ -15,8 +15,9 @@ services:
       - CRAFTY_BASE_URL=${CRAFTY_BASE_URL}
       - CRAFTY_USERNAME=${CRAFTY_USERNAME:-admin}
       - CRAFTY_PASSWORD=${CRAFTY_PASSWORD}
+      - CRAFTY_API_KEY=${CRAFTY_API_KEY}
 
       # Database (optional)
-      # - DATABASE_URL="file:/opt/crafty-status/prod.db"
+      # - DATABASE_URL="file:/opt/craftystatus/prod.db"
     volumes:
-      - ./docker/crafty-status:/opt/crafty-status
+      - ./docker/craftystatus:/opt/craftystatus

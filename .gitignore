@@ -137,3 +137,6 @@ dist
 
 # Databases
 *.db
+
+# Docker
+docker/

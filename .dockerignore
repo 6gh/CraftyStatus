@@ -144,3 +144,6 @@ dist
 # Git
 .git
 .gitignore
+
+# Docker Volume Data
+docker/

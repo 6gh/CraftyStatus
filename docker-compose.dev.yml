@@ -1,5 +1,9 @@
 services:
-  crafty-status:
+  craftystatus:
     build:
       context: .
       dockerfile: Dockerfile
+      tags:
+        - craftystatus:dev
+    environment:
+      - NODE_ENV=development

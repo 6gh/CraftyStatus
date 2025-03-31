@@ -5,7 +5,7 @@ RUN corepack enable
 COPY . /app
 WORKDIR /app
 
-RUN mkdir -p /opt/crafty-status
+RUN mkdir -p /opt/craftystatus
 
 # Package -> Required for
 # openssl -> sqlite
@@ -20,7 +20,7 @@ ENV DISCORD_PREFIX=cs!
 ENV CRAFTY_BASE_URL=
 ENV CRAFTY_USERNAME=
 ENV CRAFTY_PASSWORD=
-ENV DATABASE_URL="file:/opt/crafty-status/prod.db"
+ENV DATABASE_URL="file:/opt/craftystatus/prod.db"
 
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 RUN pnpm prisma db push
