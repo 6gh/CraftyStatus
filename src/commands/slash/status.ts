@@ -9,8 +9,8 @@ import { SlashCommand } from "../../classes/slashcommand.js";
 import axios from "axios";
 import { $client } from "../../index.js";
 import { ServerStatusGet } from "../../types/craftyapi.js";
-import { offlineColor, onlineColor } from "../../utils/consts.js";
 import { createPlayerCountChart } from "../../utils/createChart.js";
+import { createEmbed } from "../../utils/createEmbed.js";
 
 export default new SlashCommand(
   new SlashCommandBuilder()
@@ -28,9 +28,15 @@ export default new SlashCommand(
         )
         .addStringOption((option) =>
           option
-            .setName("custom-ip")
+            .setName("java-ip")
+            .setDescription("If you wish to display a java address.")
+            .setRequired(false)
+        )
+        .addStringOption((option) =>
+          option
+            .setName("bedrock-ip")
             .setDescription(
-              "If you wish to display a custom IP address. If not provided, no IP address will be displayed"
+              "If you wish to display a bedrock address. Add port with <ip>:<port>"
             )
             .setRequired(false)
         )
@@ -55,9 +61,15 @@ export default new SlashCommand(
         )
         .addStringOption((option) =>
           option
-            .setName("custom-ip")
+            .setName("java-ip")
+            .setDescription("If you wish to display a java address.")
+            .setRequired(false)
+        )
+        .addStringOption((option) =>
+          option
+            .setName("bedrock-ip")
             .setDescription(
-              "If you wish to display a custom IP address. If not provided, no IP address will be displayed"
+              "If you wish to display a bedrock address. Add port with <ip>:<port>"
             )
             .setRequired(false)
         )
@@ -112,7 +124,8 @@ export default new SlashCommand(
 
           // get the options provided
           const uuid = interaction.options.get("uuid");
-          const ip = interaction.options.get("custom-ip", false);
+          const javaip = interaction.options.get("java-ip", false);
+          const bedrockip = interaction.options.get("bedrock-ip", false);
           const showMaxPlayers =
             interaction.options.get("show-max-players", false)?.value === true;
 
@@ -166,14 +179,14 @@ export default new SlashCommand(
             // extract data
             const serverName = status.server_id.server_name;
             const serverVersion = status.version.replace(/[^0-9\.]/gm, "");
-            const serverIp = ip?.value?.toString() || undefined;
+            const javaIp = javaip?.value?.toString() || undefined;
+            const bedrockIp =
+              bedrockip?.value?.toString().split(":")[0] || undefined;
+            const bedrockPort = bedrockip?.value?.toString().split(":")[1];
             const online = status.running;
             const playerCount = status.online;
             const maxPlayers = status.max;
             const players = status.players;
-            const playerString = (
-              JSON.parse(players.replace(/'/gm, '"')) as string[]
-            ).join("\n");
 
             // create the chart
             const chart = await createPlayerCountChart(
@@ -185,49 +198,25 @@ export default new SlashCommand(
                 },
               ],
               online,
-              [showMaxPlayers, showMaxPlayers ? playerCount : -1]
+              [showMaxPlayers, showMaxPlayers ? maxPlayers : -1]
             );
 
             // create the embed
-            const embed = new EmbedBuilder()
-              .setTitle(`${serverName} Status`)
-              .setDescription(
-                `Server is currently ${online ? "online" : "offline"}`
-              )
-              .setColor(online ? onlineColor : offlineColor)
-              .setFooter({
-                text: "Last updated",
-              })
-              .setTimestamp(Date.now());
-
-            if (serverIp) {
-              embed.addFields([
+            const embed = await createEmbed({
+              serverName,
+              online,
+              javaIp: javaIp || null,
+              javaPort: null,
+              bedrockIp: bedrockIp || null,
+              bedrockPort: bedrockPort || null,
+              serverVersion,
+              playerCounts: [
                 {
-                  name: "Server IP",
-                  value: `\`${serverIp}\``,
-                  inline: true,
+                  playerCount,
+                  players,
                 },
-              ]);
-            }
-            embed.addFields([
-              {
-                name: "Server Version",
-                value: `\`${serverVersion}\``,
-                inline: true,
-              },
-              {
-                name: "Player Count",
-                value: `\`${playerCount} players online\``,
-                inline: true,
-              },
-              {
-                name: "Online Players",
-                value:
-                  playerCount < 1
-                    ? "```No players online```"
-                    : `\`\`\`${playerString}\`\`\``,
-              },
-            ]);
+              ],
+            });
 
             if (chart) {
               embed.setImage(`attachment://player-count-chart.png`);
@@ -248,7 +237,9 @@ export default new SlashCommand(
                 serverId: status.server_id.server_id,
                 serverName,
                 serverVersion,
-                serverIp,
+                javaIp,
+                bedrockIp,
+                bedrockPort,
                 maintenance: false,
                 online: status.running,
                 playerCounts: {
@@ -301,7 +292,11 @@ export default new SlashCommand(
 
         // get the options provided
         const messageId = interaction.options.get("message-id");
-        const ip = interaction.options.get("custom-ip", false);
+        const userProvidedJavaIp = interaction.options.get("java-ip", false);
+        const userProvidedBedrockIp = interaction.options.get(
+          "bedrock-ip",
+          false
+        );
         let showMaxPlayers:
           | CommandInteractionOption<CacheType>
           | null
@@ -316,7 +311,7 @@ export default new SlashCommand(
         }
         console.log(messageId.value);
 
-        if (!ip?.value && showMaxPlayers?.value === undefined) {
+        if (!userProvidedJavaIp?.value && showMaxPlayers?.value === undefined) {
           await interaction.reply({
             content: "No options provided. Updating not necessary",
             flags: MessageFlags.Ephemeral,
@@ -351,7 +346,7 @@ export default new SlashCommand(
               playerCounts: {
                 where: {
                   createdAt: {
-                    gte: new Date(Date.now() - 1000 * 60 * 60 * 24),
+                    gte: new Date(Date.now() - 1000 * 60 * 60 * 24), // last 24h
                   },
                 },
               },
@@ -393,7 +388,14 @@ export default new SlashCommand(
           // extract data
           const serverName = status.server_id.server_name;
           const serverVersion = status.version.replace(/[^0-9\.]/gm, "");
-          const serverIp = ip?.value?.toString() || dbStatus.serverIp;
+          const javaIp =
+            userProvidedJavaIp?.value?.toString() || dbStatus.javaIp;
+          const bedrockIp =
+            userProvidedBedrockIp?.value?.toString().split(":")[0] ||
+            dbStatus.bedrockIp;
+          const bedrockPort =
+            userProvidedBedrockIp?.value?.toString().split(":")[1] ||
+            dbStatus.bedrockPort;
           const online = status.running;
           const playerCount = status.online;
           const maxPlayers = status.max;
@@ -417,45 +419,21 @@ export default new SlashCommand(
           );
 
           // update the embed
-          const embed = new EmbedBuilder()
-            .setTitle(`${serverName} Status`)
-            .setDescription(
-              `Server is currently ${online ? "online" : "offline"}`
-            )
-            .setColor(online ? onlineColor : offlineColor)
-            .setFooter({
-              text: "Last updated",
-            })
-            .setTimestamp(Date.now());
-
-          if (serverIp) {
-            embed.addFields([
+          const embed = await createEmbed({
+            bedrockIp: bedrockIp || null,
+            bedrockPort: bedrockPort || null,
+            javaIp: javaIp || null,
+            javaPort: null,
+            online,
+            playerCounts: [
               {
-                name: "Server IP",
-                value: `\`${serverIp}\``,
-                inline: true,
+                playerCount,
+                players,
               },
-            ]);
-          }
-          embed.addFields([
-            {
-              name: "Server Version",
-              value: `\`${serverVersion}\``,
-              inline: true,
-            },
-            {
-              name: "Player Count",
-              value: `\`${playerCount} players online\``,
-              inline: true,
-            },
-            {
-              name: "Online Players",
-              value:
-                playerCount < 1
-                  ? "```No players online```"
-                  : `\`\`\`${playerString}\`\`\``,
-            },
-          ]);
+            ],
+            serverName,
+            serverVersion,
+          });
 
           if (chart) {
             embed.setImage(`attachment://player-count-chart.png`);
@@ -496,7 +474,9 @@ export default new SlashCommand(
             data: {
               serverName,
               serverVersion,
-              serverIp,
+              javaIp,
+              bedrockIp,
+              bedrockPort,
               maintenance: false,
               online: status.running,
               playerCounts: {

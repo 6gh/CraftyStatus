@@ -35,7 +35,10 @@ model Status {
   serverId       String
   serverName     String
   serverVersion  String
-  serverIp       String?
+  javaIp       String?
+  javaPort     String?
+  bedrockIp    String?
+  bedrockPort  String?         @default("19132")
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   playerCounts   PlayerCount[]

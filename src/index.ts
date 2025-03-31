@@ -20,6 +20,7 @@ import { TextCommand } from "./classes/textcommand.js";
 import { schedule } from "node-cron";
 import { createPlayerCountChart } from "./utils/createChart.js";
 import { offlineColor, onlineColor } from "./utils/consts.js";
+import { createEmbed } from "./utils/createEmbed.js";
 
 //ANCHOR - Setup crafty API
 
@@ -458,53 +459,7 @@ schedule("*/1 * * * *", async () => {
         ]
       );
 
-      // create the embed
-      const embed = new EmbedBuilder()
-        .setTitle(`${currentStatus.serverName} Status`)
-        .setDescription(
-          `Server is currently ${currentStatus.online ? "online" : "offline"}`
-        )
-        .setColor(currentStatus.online ? onlineColor : offlineColor)
-        .setFooter({
-          text: "Last updated",
-        })
-        .setTimestamp(Date.now());
-
-      if (currentStatus.serverIp) {
-        embed.addFields([
-          {
-            name: "Server IP",
-            value: `\`${currentStatus.serverIp}\``,
-            inline: true,
-          },
-        ]);
-      }
-
-      const playerList = (
-        JSON.parse(
-          currentStatus.playerCounts[0].players.replace(/'/g, '"')
-        ) as string[]
-      ).join("\n");
-
-      embed.addFields([
-        {
-          name: "Server Version",
-          value: `\`${currentStatus.serverVersion}\``,
-          inline: true,
-        },
-        {
-          name: "Player Count",
-          value: `\`${currentStatus.playerCounts[0].playerCount} players online\``,
-          inline: true,
-        },
-        {
-          name: "Online Players",
-          value:
-            currentStatus.playerCounts[0].playerCount > 0
-              ? `\`\`\`${playerList}\`\`\``
-              : "```No players online```",
-        },
-      ]);
+      const embed = await createEmbed(currentStatus);
 
       if (chart) {
         embed.setImage(`attachment://player-count-chart.png`);
