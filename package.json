@@ -1,6 +1,6 @@
 {
   "name": "craftystatus",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "A Discord bot to show real-time statuses of Minecraft servers hosted with Crafty Controller",
   "main": "index.js",
   "type": "module",
