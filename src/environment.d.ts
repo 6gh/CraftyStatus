@@ -6,6 +6,6 @@ declare namespace NodeJS {
     DISCORD_PREFIX: string;
     CRAFTY_BASE_URL: string;
     CRAFTY_API_KEY: string;
-    DATABASE_URL: string;
+    POSTGRES_URL: string;
   }
 }
