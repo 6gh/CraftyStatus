@@ -10,6 +10,7 @@ import {
   ActivityType,
   ChannelType,
   Client,
+  ClientEvents,
   Collection,
   EmbedBuilder,
   MessageFlags,
@@ -22,6 +23,36 @@ import { schedule } from "node-cron";
 import { createPlayerCountChart } from "./utils/createChart.js";
 import { createEmbed } from "./utils/createEmbed.js";
 import logger from "./utils/logger.js";
+import { BotEvent } from "./classes/botevent.js";
+
+//ANCHOR - Setup prisma client
+
+export const $client = new PrismaClient({
+  log:
+    process.env.NODE_ENV === "development"
+      ? ["error", "info", "query", "warn"]
+      : process.env.NODE_ENV === "production"
+      ? ["error", "info", "warn"]
+      : ["error", "warn"],
+});
+
+//Ensure the discord owner has access to all commands
+await $client.discordUser.upsert({
+  where: {
+    discordId: process.env.DISCORD_OWNER_ID,
+  },
+  update: {
+    creationAllowed: true,
+    deleteAllowed: true,
+    updateAllowed: true,
+  },
+  create: {
+    discordId: process.env.DISCORD_OWNER_ID,
+    creationAllowed: true,
+    deleteAllowed: true,
+    updateAllowed: true,
+  },
+});
 
 //ANCHOR - Setup crafty API
 
@@ -32,15 +63,6 @@ if (!process.env.CRAFTY_BASE_URL) {
 if (!process.env.CRAFTY_API_KEY) {
   throw new Error("CRAFTY_API_KEY is not defined");
 }
-
-export const $client = new PrismaClient({
-  log:
-    process.env.NODE_ENV === "development"
-      ? ["error", "info", "query", "warn"]
-      : process.env.NODE_ENV === "production"
-      ? ["error", "info", "warn"]
-      : ["error", "warn"],
-});
 
 // remove trailing slash
 process.env.CRAFTY_BASE_URL = process.env.CRAFTY_BASE_URL.replace(/\/$/, "");
@@ -97,17 +119,11 @@ export const bot = new Client({
   },
 });
 
-bot.on("ready", () => {
-  logger.info(`Logged in as ${bot.user?.tag}`);
+//ANCHOR - Setup events and commands
 
-  logger.info(
-    `Invite with: https://discord.com/oauth2/authorize?client_id=${bot.application?.id}&permissions=536964096&integration_type=0&scope=bot+applications.commands`
-  );
-});
-
-//ANCHOR - Setup commands
 export const slashCommands = new Collection<string, SlashCommand>();
-const textCommands = new Collection<string, TextCommand>();
+export const textCommands = new Collection<string, TextCommand>();
+const events = new Collection<string, BotEvent<keyof ClientEvents>>();
 
 // kept getting Warning: Detected unsettled top-level await
 // so i wrapped it in an async function
@@ -130,10 +146,7 @@ const textCommands = new Collection<string, TextCommand>();
 
       logger.warn(`Command ${file} is invalid`);
     } catch (error) {
-      logger.warn(`Failed to load command ${file}: ${error}`);
-      if (process.env.NODE_ENV === "development") {
-        logger.error(error);
-      }
+      logger.error(`Failed to load command ${file}: ${error}`);
       continue;
     }
   }
@@ -157,102 +170,40 @@ const textCommands = new Collection<string, TextCommand>();
       logger.warn(`Command ${file} is invalid`);
       continue;
     } catch (error) {
-      logger.warn(`Failed to load command ${file}: ${error}`);
-      if (process.env.NODE_ENV === "development") {
-        logger.error(error);
+      logger.error(`Failed to load command ${file}: ${error}`);
+      continue;
+    }
+  }
+
+  const eventDirFiles = readdirSync(path.join(import.meta.dirname, "events"));
+
+  for (const file of eventDirFiles) {
+    try {
+      const { default: event } = await import(`./events/${file}`);
+
+      if (event instanceof BotEvent) {
+        if (event.on) {
+          bot.on(event.on, event.execute);
+          logger.debug(`Loaded event ${file}`);
+          continue;
+        }
       }
+
+      logger.warn(`Event ${file} is invalid`);
+      continue;
+    } catch (error) {
+      logger.error(`Failed to load event ${file}: ${error}`);
       continue;
     }
   }
 
   logger.info(
-    `Loaded commands | Slash: ${slashCommands.size} | Text: ${textCommands.size}`
+    `Loaded commands & events | Slash: ${slashCommands.size} | Text: ${textCommands.size} | Events: ${events.size}`
   );
+
+  //NOTE - We want the bot to load AFTER the commands and events are loaded
+  await bot.login(process.env.DISCORD_TOKEN);
 })();
-
-bot.on("messageCreate", async (message) => {
-  if (message.author.bot) return;
-
-  const dbUser = await $client.discordUser.findFirst({
-    where: {
-      discordId: message.author.id,
-    },
-  });
-
-  if (!dbUser) return;
-
-  const prefix = process.env.DISCORD_PREFIX || "cs!";
-
-  if (!message.content.startsWith(prefix)) return;
-
-  const args = message.content.slice(prefix.length).trim().split(/ +/);
-  const command = args.shift()?.toLowerCase();
-
-  if (!command) return;
-
-  const textCommand = textCommands.get(command);
-
-  if (textCommand) {
-    try {
-      await textCommand.execute({ message, args, dbUser });
-    } catch (error) {
-      logger.error(error);
-      await message.reply("There was an error trying to execute that command!");
-    }
-  }
-});
-
-bot.on("interactionCreate", async (interaction) => {
-  if (!interaction.isCommand()) return;
-
-  const command = slashCommands.get(interaction.commandName);
-
-  if (!command) return;
-
-  const dbUser = await $client.discordUser.findUnique({
-    where: {
-      discordId: interaction.user.id,
-    },
-  });
-
-  if (!dbUser) {
-    await interaction.reply({
-      content: "You are not allowed to use this bot",
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  try {
-    await command.execute({ interaction, dbUser });
-  } catch (error) {
-    logger.error(error);
-    await interaction.reply(
-      "There was an error trying to execute that command!"
-    );
-  }
-});
-
-//ANCHOR - Ensure the discord owner has access to all commands
-
-await $client.discordUser.upsert({
-  where: {
-    discordId: process.env.DISCORD_OWNER_ID,
-  },
-  update: {
-    creationAllowed: true,
-    deleteAllowed: true,
-    updateAllowed: true,
-  },
-  create: {
-    discordId: process.env.DISCORD_OWNER_ID,
-    creationAllowed: true,
-    deleteAllowed: true,
-    updateAllowed: true,
-  },
-});
-
-await bot.login(process.env.DISCORD_TOKEN);
 
 schedule("*/1 * * * *", async () => {
   logger.debug("Running scheduled task | Checking embed to update");
