@@ -28,12 +28,21 @@ import { BotEvent } from "./classes/botevent.js";
 //ANCHOR - Setup prisma client
 
 export const $client = new PrismaClient({
-  log:
-    process.env.NODE_ENV === "development"
-      ? ["error", "info", "query", "warn"]
-      : process.env.NODE_ENV === "production"
-      ? ["error", "info", "warn"]
-      : ["error", "warn"],
+  // i hate how this looks but it works
+  log: (() => {
+    switch (process.env.NODE_ENV) {
+      case "debug":
+        return ["error", "info", "query", "warn"];
+      case "development":
+        return ["error", "info", "warn"];
+      case "production":
+      case "silent":
+        return ["error", "warn"];
+
+      default:
+        return ["error", "warn"];
+    }
+  })(),
 });
 
 //Ensure the discord owner has access to all commands
