@@ -21,21 +21,30 @@ type currentStatusType = Prisma.StatusGetPayload<{
 }>;
 
 export const createEmbed = async (
-  currentStatus: currentStatusType
+  currentStatus: currentStatusType,
+  statusDateTaken: Date | null = null
 ): Promise<EmbedBuilder> => {
   // create the embed
   const embed = new EmbedBuilder()
     .setTitle(`${currentStatus.serverName} Status`)
     .setDescription(
-      `Server is currently ${
-        currentStatus.online ? "**online**" : "**offline**"
-      }`
+      statusDateTaken
+        ? `Showing historic player data for **${statusDateTaken.toDateString()}**`
+        : `Server is currently ${
+            currentStatus.online ? "**online**" : "**offline**"
+          }`
     )
-    .setColor(currentStatus.online ? onlineColor : offlineColor)
+    .setColor(
+      statusDateTaken
+        ? onlineColor
+        : currentStatus.online
+        ? onlineColor
+        : offlineColor
+    )
     .setFooter({
-      text: "Last updated",
+      text: statusDateTaken ? statusDateTaken.toDateString() : "Last updated",
     })
-    .setTimestamp(Date.now());
+    .setTimestamp(statusDateTaken ? undefined : Date.now());
 
   if (currentStatus.javaIp) {
     embed.addFields([
@@ -69,10 +78,27 @@ export const createEmbed = async (
 
   // logger.debug(currentStatus.playerCounts[0].players.replace(/'/g, '"'));
 
-  let playerList: string[] | string = JSON.parse(
-    currentStatus.playerCounts[0].players.replace(/'/g, '"')
-  ) as string[];
-  playerList = playerList.map((player) => player.replace(/"/g, ""));
+  let playerList: string[] | string;
+
+  if (statusDateTaken) {
+    // get a list of players online at any given time on this day
+    let combinedPlayerList: Set<string> = new Set();
+
+    for (let playerCount of currentStatus.playerCounts) {
+      playerList = JSON.parse(
+        playerCount.players.replace(/'/g, '"')
+      ) as string[]; // "['player1', 'player2', 'player3']" -> ["player1", "player2", "player3"]
+      playerList.forEach((player) => combinedPlayerList.add(player));
+    }
+
+    playerList = Array.from(combinedPlayerList);
+  } else {
+    playerList = JSON.parse(
+      currentStatus.playerCounts[0].players.replace(/'/g, '"')
+    ) as string[]; // "['player1', 'player2', 'player3']" -> ["player1", "player2", "player3"]
+  }
+
+  playerList = playerList.map((player) => player.replace(/"/g, "")); //
   // logger.debug(playerList);
 
   playerList = playerList.map((player) => player.replace(/^\./g, ""));
@@ -89,7 +115,13 @@ export const createEmbed = async (
       name: "Online Players",
       value:
         currentStatus.playerCounts[0].playerCount > 0
-          ? `${currentStatus.playerCounts[0].playerCount} players online:\n\`\`\`\n${playerList}\n\`\`\``
+          ? `${
+              statusDateTaken
+                ? `All players online on ${statusDateTaken.toDateString()}:`
+                : `${currentStatus.playerCounts[0].playerCount} players online:`
+            }\n\`\`\`\n${playerList}\n\`\`\``
+          : statusDateTaken
+          ? "No one ever logged in :sob:"
           : "```\nNo players online\n```",
     },
   ]);

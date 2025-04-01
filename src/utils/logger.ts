@@ -1,10 +1,13 @@
 import chalk from "chalk";
 
-export const info = (message: unknown) => {
-  if (process.env.NODE_ENV === "silent") return;
+export const info = (message: unknown, force = false) => {
+  if (process.env.NODE_ENV === "silent" && !force) return;
 
   const date = chalk.gray(`[${new Date().toLocaleString()}]`);
-  console.log(`${date} ${chalk.cyan("[INFO]")}`, message);
+  console.log(
+    `${date} ${force ? chalk.bgCyan("[INFO]") : chalk.cyan("[INFO]")}`,
+    message
+  );
 };
 
 export const warn = (message: unknown) => {

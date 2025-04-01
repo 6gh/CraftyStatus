@@ -12,6 +12,7 @@ import { ServerStatusGet } from "../../types/craftyapi.js";
 import { createPlayerCountChart } from "../../utils/createChart.js";
 import { createEmbed } from "../../utils/createEmbed.js";
 import logger from "../../utils/logger.js";
+import { statusEmbedActionRow } from "../../utils/consts.js";
 
 export default new SlashCommand(
   new SlashCommandBuilder()
@@ -117,7 +118,7 @@ export default new SlashCommand(
 
           if (!dbUser.creationAllowed) {
             await interaction.reply({
-              content: "You do not have access to create a status embed",
+              content: "You do not have permission to create a status embed",
               flags: MessageFlags.Ephemeral,
             });
             return;
@@ -210,6 +211,7 @@ export default new SlashCommand(
             }
 
             const msg = await interaction.channel.send({
+              components: [statusEmbedActionRow],
               embeds: [embed],
               files: chart
                 ? [{ name: "player-count-chart.png", attachment: chart }]
@@ -271,7 +273,7 @@ export default new SlashCommand(
 
         if (!dbUser.updateAllowed) {
           await interaction.reply({
-            content: "You do not have access to modify a status embed",
+            content: "You do not have permission to modify a status embed",
             flags: MessageFlags.Ephemeral,
           });
           return;
@@ -424,6 +426,7 @@ export default new SlashCommand(
           if (!msg) {
             logger.warn("Message not found. Creating new message");
             await interaction.channel.send({
+              components: [statusEmbedActionRow],
               embeds: [embed],
               files: chart
                 ? [{ name: "player-count-chart.png", attachment: chart }]
@@ -431,6 +434,7 @@ export default new SlashCommand(
             });
           } else {
             await msg.edit({
+              components: [statusEmbedActionRow],
               embeds: [embed],
               files: chart
                 ? [{ name: "player-count-chart.png", attachment: chart }]

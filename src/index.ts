@@ -24,6 +24,7 @@ import { createPlayerCountChart } from "./utils/createChart.js";
 import { createEmbed } from "./utils/createEmbed.js";
 import logger from "./utils/logger.js";
 import { BotEvent } from "./classes/botevent.js";
+import { statusEmbedActionRow } from "./utils/consts.js";
 
 //ANCHOR - Setup prisma client
 
@@ -214,18 +215,23 @@ const events = new Collection<string, BotEvent<keyof ClientEvents>>();
   await bot.login(process.env.DISCORD_TOKEN);
 })();
 
+//ANCHOR - Status updater: Update the status of the servers every 5 minutes (check every 1 minute)
 schedule("*/1 * * * *", async () => {
-  logger.debug("Running scheduled task | Checking embed to update");
+  logger.debug("[Task] Running status updater");
 
   const statuses = await $client.status.findMany({
     where: {
       updatedAt: {
-        lte: new Date(Date.now() - 1000 * 60 * 0.5), // 5 minutes
+        lte:
+          process.env.NODE_ENV === "debug" ||
+          process.env.NODE_ENV === "development"
+            ? new Date(Date.now() - 1000 * 60 * 0.5) // 1000 ms * 60 s * 0.5 = 30 seconds
+            : new Date(Date.now() - 1000 * 60 * 5), // 1000 ms * 60 s * 5 = 5 minutes
       },
     },
   });
 
-  logger.debug(`Found ${statuses.length} statuses to update`);
+  logger.debug(`[Task] Found ${statuses.length} statuses to update`);
 
   for (const status of statuses) {
     try {
@@ -237,7 +243,7 @@ schedule("*/1 * * * *", async () => {
         !channel.isSendable() ||
         channel.type !== ChannelType.GuildText
       ) {
-        logger.warn(
+        logger.error(
           `Channel ${status.channelId} not found! Will reattempt next time...`
         );
         continue;
@@ -250,20 +256,31 @@ schedule("*/1 * * * *", async () => {
             .sort((a, b) => b.createdTimestamp - a.createdTimestamp);
 
       if (message instanceof Collection) {
-        const msg = message.first();
+        logger.warn(
+          `[STAT_ID: ${status.id}] Couldn't find the stored message from the database! Attempting to find the newest one in the channel...`
+        );
 
         if (message.size > 1) {
           logger.warn(
-            `Found ${message.size} messages by the bot in the channel ${channel.id}. Assuming it is the newest one!`
+            `[STAT_ID: ${status.id}] Found ${message.size} messages by the bot in the channel ${channel.id}. Assuming it is the newest one!`
           );
         }
 
+        const msg = message.first();
+
         if (!msg) {
-          logger.warn("No message found! Will reattempt next time...");
+          logger.error(
+            `[STAT_ID: ${status.id}] No messages by our bot found in the channel ${channel.id}! Will reattempt next time...`
+          );
+          logger.debug(message);
           continue;
         }
 
         message = msg;
+
+        logger.warn(
+          `[STAT_ID: ${status.id}] Replacing the stored message id with the new one found...`
+        );
 
         await $client.status.update({
           where: {
@@ -288,7 +305,10 @@ schedule("*/1 * * * *", async () => {
       const server = res.data as ServerStatusGet;
 
       if (server.status !== "ok") {
-        logger.warn("Server not found, or an error occurred");
+        logger.error(
+          `[STAT_ID: ${status.id}] Server not found, or an error occurred`
+        );
+        logger.debug(server);
         continue;
       }
 
@@ -356,6 +376,7 @@ schedule("*/1 * * * *", async () => {
       }
 
       message.edit({
+        components: [statusEmbedActionRow],
         embeds: [embed],
         files: chart
           ? [{ name: "player-count-chart.png", attachment: chart }]
@@ -370,5 +391,5 @@ schedule("*/1 * * * *", async () => {
     }
   }
 
-  logger.debug("Cron job finished");
+  logger.debug("[Task] Status Updater finished");
 });
