@@ -6,4 +6,6 @@ services:
       tags:
         - craftystatus:dev
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=development # more logging
+    ports:
+      - "5555:5555" # Prisma Studio

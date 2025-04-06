@@ -156,7 +156,7 @@ export default new BotEvent("interactionCreate", async (interaction) => {
       }
 
       // create the chart
-      const chart = await createPlayerCountChart(status.playerCounts, true, [
+      const chart = await createPlayerCountChart(status.playerCounts, [
         status.showMaxPlayers,
         status.playerCounts.sort((a, b) => b.maxPlayers - a.maxPlayers)[0]
           .maxPlayers,

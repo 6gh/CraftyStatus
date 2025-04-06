@@ -7,7 +7,6 @@ import logger from "./logger.js";
 type currentStatusType = Prisma.StatusGetPayload<{
   select: {
     serverName: true;
-    online: true;
     javaIp: true;
     javaPort: true;
     bedrockIp: true;
@@ -15,6 +14,7 @@ type currentStatusType = Prisma.StatusGetPayload<{
     serverVersion: true;
     playerCounts: {
       select: {
+        online: true;
         playerCount: true;
         players: true;
       };
@@ -33,13 +33,13 @@ export const createEmbed = async (
       statusDateTaken
         ? `Showing historic player data for **${statusDateTaken.toDateString()}**`
         : `Server is currently ${
-            currentStatus.online ? "**online**" : "**offline**"
+            currentStatus.playerCounts[0].online ? "**online**" : "**offline**"
           }`
     )
     .setColor(
       statusDateTaken
         ? historyColor
-        : currentStatus.online
+        : currentStatus.playerCounts[0].online
         ? onlineColor
         : offlineColor
     )

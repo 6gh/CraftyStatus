@@ -181,19 +181,18 @@ export default new SlashCommand(
             const chart = await createPlayerCountChart(
               [
                 {
+                  online,
                   playerCount,
                   createdAt: new Date(),
                   maxPlayers,
                 },
               ],
-              online,
               [showMaxPlayers, showMaxPlayers ? maxPlayers : -1]
             );
 
             // create the embed
             const embed = await createEmbed({
               serverName,
-              online,
               javaIp: javaIp || null,
               javaPort: null,
               bedrockIp: bedrockIp || null,
@@ -201,6 +200,7 @@ export default new SlashCommand(
               serverVersion,
               playerCounts: [
                 {
+                  online,
                   playerCount,
                   players,
                 },
@@ -231,9 +231,9 @@ export default new SlashCommand(
                 bedrockIp,
                 bedrockPort,
                 maintenance: false,
-                online: status.running,
                 playerCounts: {
                   create: {
+                    online: status.running,
                     playerCount,
                     players,
                     maxPlayers,
@@ -381,12 +381,12 @@ export default new SlashCommand(
             [
               ...dbStatus.playerCounts,
               {
+                online,
                 playerCount,
                 createdAt: new Date(),
                 maxPlayers,
               },
             ],
-            online,
             [showMaxPlayers, showMaxPlayers ? maxPlayers : -1]
           );
 
@@ -396,9 +396,9 @@ export default new SlashCommand(
             bedrockPort: bedrockPort || null,
             javaIp: javaIp || null,
             javaPort: null,
-            online,
             playerCounts: [
               {
+                online,
                 playerCount,
                 players,
               },
@@ -452,9 +452,9 @@ export default new SlashCommand(
               bedrockIp,
               bedrockPort,
               maintenance: false,
-              online: status.running,
               playerCounts: {
                 create: {
+                  online: status.running,
                   playerCount,
                   players,
                   maxPlayers,

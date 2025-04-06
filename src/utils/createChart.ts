@@ -8,6 +8,7 @@ Chart.register(...registerables);
 
 type PlayerCount = Prisma.PlayerCountGetPayload<{
   select: {
+    online: true;
     createdAt: true;
     playerCount: true;
     maxPlayers: true;
@@ -16,7 +17,6 @@ type PlayerCount = Prisma.PlayerCountGetPayload<{
 
 export const createPlayerCountChart = async (
   data: PlayerCount[],
-  online: boolean,
   showMaxPlayers: [boolean, number] = [false, -1]
 ) => {
   // define chart dimensions
@@ -76,7 +76,7 @@ export const createPlayerCountChart = async (
           label: "Player Count",
           data: data.map((d) => d.playerCount),
           fill: false,
-          borderColor: online ? onlineColor : offlineColor,
+          borderColor: data[0].online ? onlineColor : offlineColor,
           tension: 0.1,
         },
       ],

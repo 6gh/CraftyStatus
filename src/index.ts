@@ -342,9 +342,9 @@ schedule("*/1 * * * *", async () => {
           serverName: serverStatus.server_id.server_name,
           serverVersion: serverStatus.version.replace(/[^0-9\.]/gm, ""),
           maintenance: false,
-          online: serverStatus.running,
           playerCounts: {
             create: {
+              online: serverStatus.running,
               playerCount: serverStatus.online,
               players: serverStatus.players,
               maxPlayers: serverStatus.max,
@@ -376,16 +376,12 @@ schedule("*/1 * * * *", async () => {
       });
 
       // create the chart
-      const chart = await createPlayerCountChart(
-        playerCounts,
-        currentStatus.online,
-        [
-          currentStatus.showMaxPlayers,
-          currentStatus.showMaxPlayers
-            ? currentStatus.playerCounts[0].maxPlayers
-            : -1,
-        ]
-      );
+      const chart = await createPlayerCountChart(playerCounts, [
+        currentStatus.showMaxPlayers,
+        currentStatus.showMaxPlayers
+          ? currentStatus.playerCounts[0].maxPlayers
+          : -1,
+      ]);
 
       const embed = await createEmbed(currentStatus);
 

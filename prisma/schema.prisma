@@ -23,15 +23,15 @@ model Status {
   id             Int           @id @default(autoincrement())
   channelId      String
   messageId      String        @unique
-  online         Boolean
+  online         Boolean       @default(false) // DEPRECATED, use PlayerCount.online instead
   maintenance    Boolean
   serverId       String
   serverName     String
   serverVersion  String
-  javaIp       String?
-  javaPort     String?
-  bedrockIp    String?
-  bedrockPort  String?         @default("19132")
+  javaIp         String?
+  javaPort       String?
+  bedrockIp      String?
+  bedrockPort    String?       @default("19132") // bedrock default port, since bedrock requires a port
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   playerCounts   PlayerCount[]
@@ -42,6 +42,7 @@ model PlayerCount {
   id          Int      @id @default(autoincrement())
   status      Status   @relation(fields: [statusId], references: [id])
   statusId    Int
+  online      Boolean  @default(true)
   playerCount Int
   maxPlayers  Int
   players     String
