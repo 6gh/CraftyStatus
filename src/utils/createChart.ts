@@ -36,7 +36,39 @@ export const createPlayerCountChart = async (
 
   // create the chart
   new Chart(ctx, {
-    type: "line",
+    type: "scatter",
+    plugins: [
+      {
+        // modified from https://stackoverflow.com/a/60240828
+        id: "custom_multicolor_line_chart",
+        beforeDraw: (chart) => {
+          const ctx = chart.ctx;
+          const xAxis = chart.scales["x"];
+          const yAxis = chart.scales["y"];
+          chart.config.data.datasets[0].data.forEach((_, index) => {
+            if (index > 0) {
+              const valueFrom = data[index - 1];
+              const valueTo = data[index];
+              const xFrom = xAxis.getPixelForValue(
+                valueFrom.createdAt.getTime()
+              );
+              const yFrom = yAxis.getPixelForValue(valueFrom.playerCount);
+              const xTo = xAxis.getPixelForValue(valueTo.createdAt.getTime());
+              const yTo = yAxis.getPixelForValue(valueTo.playerCount);
+              ctx.save();
+              // TODO: when server offline support is added, change color based on server status
+              ctx.strokeStyle = onlineColor;
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.moveTo(xFrom, yFrom);
+              ctx.lineTo(xTo, yTo);
+              ctx.stroke();
+              ctx.restore();
+            }
+          });
+        },
+      },
+    ],
     data: {
       labels: data.map((d) => d.createdAt.toISOString()),
       datasets: [
