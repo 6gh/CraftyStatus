@@ -13,6 +13,10 @@ services:
 
       # Crafty Controller API
       - CRAFTY_BASE_URL=${CRAFTY_BASE_URL}
+      # Skip TLS verification?
+      # true = insecure, false = secure
+      # Useful for self-signed certificates, or local deployments
+      - CRAFTY_INSECURE_API=${CRAFTY_INSECURE_API:-false}
       - CRAFTY_API_KEY=${CRAFTY_API_KEY}
 
       # Database

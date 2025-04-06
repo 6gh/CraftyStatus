@@ -7,7 +7,7 @@ import {
 } from "discord.js";
 import { SlashCommand } from "../../classes/slashcommand.js";
 import axios from "axios";
-import { $client } from "../../index.js";
+import { $client, axiosInstance } from "../../index.js";
 import { ServerStatusGet } from "../../types/craftyapi.js";
 import { createPlayerCountChart } from "../../utils/createChart.js";
 import { createEmbed } from "../../utils/createEmbed.js";
@@ -145,7 +145,7 @@ export default new SlashCommand(
           });
 
           try {
-            const res = await axios.get(
+            const res = await axiosInstance.get(
               `${process.env.CRAFTY_BASE_URL}/api/v2/servers/${uuid.value}/stats`,
               {
                 headers: {
@@ -340,7 +340,7 @@ export default new SlashCommand(
             : dbStatus.showMaxPlayers;
 
           // get the server data
-          const res = await axios.get(
+          const res = await axiosInstance.get(
             `${process.env.CRAFTY_BASE_URL}/api/v2/servers/${dbStatus.serverId}/stats`,
             {
               headers: {

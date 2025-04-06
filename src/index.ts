@@ -25,6 +25,7 @@ import { createEmbed } from "./utils/createEmbed.js";
 import logger from "./utils/logger.js";
 import { BotEvent } from "./classes/botevent.js";
 import { statusEmbedActionRow } from "./utils/consts.js";
+import { Agent } from "https";
 
 //ANCHOR - Setup prisma client
 
@@ -77,14 +78,31 @@ if (!process.env.CRAFTY_API_KEY) {
 // remove trailing slash
 process.env.CRAFTY_BASE_URL = process.env.CRAFTY_BASE_URL.replace(/\/$/, "");
 
+if (!process.env.CRAFTY_INSECURE_API) {
+  process.env.CRAFTY_INSECURE_API = "false";
+}
+
+// create a global axios instance to handle CRAFTY_INSECURE_API
+export const axiosInstance = axios.create({
+  httpsAgent:
+    process.env.CRAFTY_INSECURE_API.toLowerCase() === "true"
+      ? new Agent({
+          rejectUnauthorized: false,
+        })
+      : undefined,
+});
+
 try {
   // try to use the token
 
-  const res = await axios.get(`${process.env.CRAFTY_BASE_URL}/api/v2/servers`, {
-    headers: {
-      Authorization: `Bearer ${process.env.CRAFTY_API_KEY}`,
-    },
-  });
+  const res = await axiosInstance.get(
+    `${process.env.CRAFTY_BASE_URL}/api/v2/servers`,
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.CRAFTY_API_KEY}`,
+      },
+    }
+  );
 
   const data = res.data as AllServersGet;
 
@@ -293,7 +311,7 @@ schedule("*/1 * * * *", async () => {
       }
 
       // now get the server status
-      const res = await axios.get(
+      const res = await axiosInstance.get(
         `${process.env.CRAFTY_BASE_URL}/api/v2/servers/${status.serverId}/stats`,
         {
           headers: {
