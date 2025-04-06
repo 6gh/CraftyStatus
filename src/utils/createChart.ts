@@ -68,7 +68,7 @@ export const createPlayerCountChart = async (
         y: {
           beginAtZero: true,
           min: 0,
-          max: maxPlayerCount + 5,
+          max: Math.max(maxPlayerCount, 5), // min value to avoid too small graphs; hardcoded to 5
         },
       },
     },

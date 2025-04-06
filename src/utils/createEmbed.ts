@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { EmbedBuilder } from "discord.js";
-import { offlineColor, onlineColor } from "./consts.js";
+import { historyColor, offlineColor, onlineColor } from "./consts.js";
 import { parseJson } from "./jsonParser.js";
 import logger from "./logger.js";
 
@@ -38,7 +38,7 @@ export const createEmbed = async (
     )
     .setColor(
       statusDateTaken
-        ? onlineColor
+        ? historyColor
         : currentStatus.online
         ? onlineColor
         : offlineColor
@@ -46,7 +46,7 @@ export const createEmbed = async (
     .setFooter({
       text: statusDateTaken ? statusDateTaken.toDateString() : "Last updated",
     })
-    .setTimestamp(statusDateTaken ? undefined : Date.now());
+    .setTimestamp(statusDateTaken ? null : Date.now());
 
   if (currentStatus.javaIp) {
     embed.addFields([
@@ -116,7 +116,7 @@ export const createEmbed = async (
     playerList = currentPlayerList ?? [];
   }
 
-  playerList = playerList.map((player) => player.replace(/"/g, "")); //
+  playerList = playerList.map((player) => player.replace(/"/g, ""));
   // logger.debug(playerList);
 
   playerList = playerList.map((player) => player.replace(/^\./g, ""));
@@ -125,19 +125,16 @@ export const createEmbed = async (
   playerList = playerList.sort((a, b) => a.localeCompare(b));
   // logger.debug(playerList);
 
-  playerList = playerList.join("\n");
-  // logger.debug(playerList);
-
   embed.addFields([
     {
       name: "Online Players",
       value:
-        currentStatus.playerCounts[0].playerCount > 0
+        playerList.length > 0
           ? `${
               statusDateTaken
                 ? `All players online on ${statusDateTaken.toDateString()}:`
                 : `${currentStatus.playerCounts[0].playerCount} players online:`
-            }\n\`\`\`\n${playerList}\n\`\`\``
+            }\n\`\`\`\n${playerList.join("\n")}\n\`\`\``
           : statusDateTaken
           ? "No one ever logged in :sob:"
           : "```\nNo players online\n```",
