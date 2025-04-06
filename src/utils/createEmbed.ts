@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { EmbedBuilder } from "discord.js";
 import { offlineColor, onlineColor } from "./consts.js";
+import { parseJson } from "./jsonParser.js";
+import logger from "./logger.js";
 
 type currentStatusType = Prisma.StatusGetPayload<{
   select: {
@@ -85,17 +87,33 @@ export const createEmbed = async (
     let combinedPlayerList: Set<string> = new Set();
 
     for (let playerCount of currentStatus.playerCounts) {
-      playerList = JSON.parse(
-        playerCount.players.replace(/'/g, '"')
-      ) as string[]; // "['player1', 'player2', 'player3']" -> ["player1", "player2", "player3"]
-      playerList.forEach((player) => combinedPlayerList.add(player));
+      const currentPlayerList = parseJson<string[]>(playerCount.players); // "['player1', 'player2', 'player3']" -> ["player1", "player2", "player3"]
+
+      if (!currentPlayerList) {
+        logger.debug(
+          "[createEmbed;statusDateTaken] Possibly failed to parse player list? currentPlayerList is null"
+        );
+        logger.debug(playerCount.players);
+        continue;
+      }
+
+      currentPlayerList.forEach((player) => combinedPlayerList.add(player));
     }
 
     playerList = Array.from(combinedPlayerList);
   } else {
-    playerList = JSON.parse(
-      currentStatus.playerCounts[0].players.replace(/'/g, '"')
-    ) as string[]; // "['player1', 'player2', 'player3']" -> ["player1", "player2", "player3"]
+    const currentPlayerList = parseJson<string[]>(
+      currentStatus.playerCounts[0].players
+    );
+
+    if (!currentPlayerList) {
+      logger.debug(
+        "[createEmbed] Possibly failed to parse player list? currentPlayerList is null"
+      );
+      logger.debug(currentStatus.playerCounts[0].players);
+    }
+
+    playerList = currentPlayerList ?? [];
   }
 
   playerList = playerList.map((player) => player.replace(/"/g, "")); //

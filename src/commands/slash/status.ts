@@ -13,6 +13,7 @@ import { createPlayerCountChart } from "../../utils/createChart.js";
 import { createEmbed } from "../../utils/createEmbed.js";
 import logger from "../../utils/logger.js";
 import { statusEmbedActionRow } from "../../utils/consts.js";
+import { parseJson } from "../../utils/jsonParser.js";
 
 export default new SlashCommand(
   new SlashCommandBuilder()
@@ -374,9 +375,6 @@ export default new SlashCommand(
           const playerCount = status.online;
           const maxPlayers = status.max;
           const players = status.players;
-          const playerString = (
-            JSON.parse(players.replace(/'/gm, '"')) as string[]
-          ).join("\n");
 
           // create the chart
           const chart = await createPlayerCountChart(
