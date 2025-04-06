@@ -55,13 +55,25 @@ export const createPlayerCountChart = async (
               const yFrom = yAxis.getPixelForValue(valueFrom.playerCount);
               const xTo = xAxis.getPixelForValue(valueTo.createdAt.getTime());
               const yTo = yAxis.getPixelForValue(valueTo.playerCount);
+              // draw line
               ctx.save();
-              // TODO: when server offline support is added, change color based on server status
-              ctx.strokeStyle = onlineColor;
+              ctx.strokeStyle = valueTo.online ? onlineColor : offlineColor;
               ctx.lineWidth = 2;
               ctx.beginPath();
               ctx.moveTo(xFrom, yFrom);
               ctx.lineTo(xTo, yTo);
+              ctx.stroke();
+              ctx.restore();
+
+              // draw circle
+              ctx.save();
+              ctx.fillStyle =
+                (valueTo.online ? onlineColor : offlineColor) + "80";
+              ctx.strokeStyle = valueTo.online ? onlineColor : offlineColor;
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.arc(xTo, yTo, 2, 0, 2 * Math.PI);
+              ctx.fill();
               ctx.stroke();
               ctx.restore();
             }
@@ -76,12 +88,19 @@ export const createPlayerCountChart = async (
           label: "Player Count",
           data: data.map((d) => d.playerCount),
           fill: false,
-          borderColor: data[0].online ? onlineColor : offlineColor,
           tension: 0.1,
+          // remove points, we draw them manually in the plugin above
+          borderColor: "transparent",
+          borderWidth: 0,
         },
       ],
     },
     options: {
+      plugins: {
+        legend: {
+          display: false, // remove legend
+        },
+      },
       scales: {
         x: {
           type: "time",
