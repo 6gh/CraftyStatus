@@ -8,6 +8,7 @@ import {
 export const onlineColor = "#57f287";
 export const offlineColor = "#ed4245";
 export const historyColor = "#7289da";
+export const peakColor = "#f9a828";
 export const statusEmbedActionRowButtonId = "showDayPickerModal";
 export const statusEmbedActionRow =
   new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents([

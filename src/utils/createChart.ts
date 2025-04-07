@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { Chart, registerables } from "chart.js";
 import "chartjs-adapter-date-fns";
 import { createCanvas } from "canvas";
-import { offlineColor, onlineColor } from "./consts.js";
+import { offlineColor, onlineColor, peakColor } from "./consts.js";
 
 Chart.register(...registerables);
 
@@ -25,6 +25,10 @@ export const createPlayerCountChart = async (
 
   // sort data by date from oldest to newest
   data.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+  const peakPlayerCount = data
+    .map((playerCount) => playerCount.playerCount)
+    .reduce((a, b) => Math.max(a, b), 0);
 
   const maxPlayerCount = showMaxPlayers[0]
     ? showMaxPlayers[1]
@@ -57,7 +61,13 @@ export const createPlayerCountChart = async (
               const yFrom = yAxis.getPixelForValue(valueFrom.playerCount);
               // draw line
               ctx.save();
-              ctx.strokeStyle = valueTo.online ? onlineColor : offlineColor;
+              ctx.strokeStyle = valueTo.online
+                ? valueTo.playerCount !== 0 &&
+                  valueFrom.playerCount === valueTo.playerCount &&
+                  valueTo.playerCount === peakPlayerCount
+                  ? peakColor
+                  : onlineColor
+                : offlineColor;
               ctx.lineWidth = 2;
               ctx.beginPath();
               ctx.moveTo(xFrom, yFrom);
@@ -68,8 +78,18 @@ export const createPlayerCountChart = async (
             // draw circle
             ctx.save();
             ctx.fillStyle =
-              (valueTo.online ? onlineColor : offlineColor) + "80";
-            ctx.strokeStyle = valueTo.online ? onlineColor : offlineColor;
+              (valueTo.online
+                ? valueTo.playerCount !== 0 &&
+                  valueTo.playerCount === peakPlayerCount
+                  ? peakColor
+                  : onlineColor
+                : offlineColor) + "80";
+            ctx.strokeStyle = valueTo.online
+              ? valueTo.playerCount !== 0 &&
+                valueTo.playerCount === peakPlayerCount
+                ? peakColor
+                : onlineColor
+              : offlineColor;
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.arc(xTo, yTo, 2, 0, 2 * Math.PI);
