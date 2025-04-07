@@ -26,12 +26,20 @@ export const createEmbed = async (
   currentStatus: currentStatusType,
   statusDateTaken: Date | null = null
 ): Promise<EmbedBuilder> => {
+  const uptimePercentage = Math.round(
+    (currentStatus.playerCounts
+      .map((playerCount) => playerCount.online)
+      .filter((online) => online === true).length /
+      currentStatus.playerCounts.length) *
+      100
+  );
+
   // create the embed
   const embed = new EmbedBuilder()
     .setTitle(`${currentStatus.serverName} Status`)
     .setDescription(
       statusDateTaken
-        ? `Showing historic player data for **${statusDateTaken.toDateString()}**`
+        ? `On ${statusDateTaken.toDateString()}, server was up ${uptimePercentage}% of the time`
         : `Server is currently ${
             currentStatus.playerCounts[0].online ? "**online**" : "**offline**"
           }`
@@ -152,12 +160,16 @@ export const createEmbed = async (
 
   embed.addFields([
     {
-      name: "Online Players",
+      name: statusDateTaken ? "Total Players" : "Online Players",
       value:
         playerList.length > 0
           ? `${
               statusDateTaken
-                ? `All players online on ${statusDateTaken.toDateString()}:`
+                ? `Peaked at ${currentStatus.playerCounts
+                    .map((playerCount) => playerCount.playerCount)
+                    .reduce((a, b) => Math.max(a, b), 0)} player(s). All ${
+                    playerList.length
+                  } player(s) online on ${statusDateTaken.toDateString()}:`
                 : `${currentStatus.playerCounts[0].playerCount} players online:`
             }\n\`\`\`\n${playerList.join("\n")}\n\`\`\``
           : statusDateTaken
