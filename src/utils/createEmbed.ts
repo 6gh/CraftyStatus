@@ -63,8 +63,8 @@ export const createEmbed = async (
     embed.addFields([
       {
         name: "Bedrock IP",
-        value: `\`${currentStatus.bedrockIp}${
-          currentStatus.bedrockPort ? ":" + currentStatus.bedrockPort : ""
+        value: `\`${currentStatus.bedrockIp}:${
+          currentStatus.bedrockPort ?? "19132"
         }\``,
         inline: true,
       },

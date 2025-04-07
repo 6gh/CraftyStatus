@@ -46,15 +46,15 @@ export const createPlayerCountChart = async (
           const xAxis = chart.scales["x"];
           const yAxis = chart.scales["y"];
           chart.config.data.datasets[0].data.forEach((_, index) => {
+            const valueTo = data[index];
+            const xTo = xAxis.getPixelForValue(valueTo.createdAt.getTime());
+            const yTo = yAxis.getPixelForValue(valueTo.playerCount);
             if (index > 0) {
               const valueFrom = data[index - 1];
-              const valueTo = data[index];
               const xFrom = xAxis.getPixelForValue(
                 valueFrom.createdAt.getTime()
               );
               const yFrom = yAxis.getPixelForValue(valueFrom.playerCount);
-              const xTo = xAxis.getPixelForValue(valueTo.createdAt.getTime());
-              const yTo = yAxis.getPixelForValue(valueTo.playerCount);
               // draw line
               ctx.save();
               ctx.strokeStyle = valueTo.online ? onlineColor : offlineColor;
@@ -64,19 +64,18 @@ export const createPlayerCountChart = async (
               ctx.lineTo(xTo, yTo);
               ctx.stroke();
               ctx.restore();
-
-              // draw circle
-              ctx.save();
-              ctx.fillStyle =
-                (valueTo.online ? onlineColor : offlineColor) + "80";
-              ctx.strokeStyle = valueTo.online ? onlineColor : offlineColor;
-              ctx.lineWidth = 1;
-              ctx.beginPath();
-              ctx.arc(xTo, yTo, 2, 0, 2 * Math.PI);
-              ctx.fill();
-              ctx.stroke();
-              ctx.restore();
             }
+            // draw circle
+            ctx.save();
+            ctx.fillStyle =
+              (valueTo.online ? onlineColor : offlineColor) + "80";
+            ctx.strokeStyle = valueTo.online ? onlineColor : offlineColor;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(xTo, yTo, 2, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
           });
         },
       },
