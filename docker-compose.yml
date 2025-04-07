@@ -6,6 +6,9 @@ services:
     # ports:
     #   - "5000:5000"
     environment:
+      # Timezone
+      - TZ=${TZ:-America/New_York}
+
       # Discord Bot
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       - DISCORD_OWNER_ID=${DISCORD_OWNER_ID}
@@ -21,8 +24,6 @@ services:
 
       # Database
       - POSTGRES_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-    volumes:
-      - ./docker/craftystatus:/opt/craftystatus
     depends_on:
       db:
         condition: service_healthy
@@ -38,6 +39,6 @@ services:
       - ./docker/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
