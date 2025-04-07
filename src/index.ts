@@ -56,6 +56,7 @@ await $client.discordUser.upsert({
     creationAllowed: true,
     deleteAllowed: true,
     updateAllowed: true,
+    purgeAllowed: true,
   },
   create: {
     discordId: process.env.DISCORD_OWNER_ID,
@@ -247,161 +248,187 @@ schedule("*/1 * * * *", async () => {
             : new Date(Date.now() - 1000 * 60 * 5), // 1000 ms * 60 s * 5 = 5 minutes
       },
     },
+    include: {
+      messages: true,
+    },
   });
 
   logger.debug(`[Task] Found ${statuses.length} statuses to update`);
 
   for (const status of statuses) {
-    try {
-      const channel = await bot.channels.fetch(status.channelId);
+    if (
+      (!status.messages || status.messages.length <= 0) &&
+      process.env.UPDATE_ORPHANED_STATUS === "false"
+    ) {
+      logger.debug(
+        `[STAT_ID: ${status.serverId}] No messages found for this status! Skipping due to UPDATE_ORPHANED_STATUS being false...`
+      );
+      continue;
+    }
 
-      if (
-        !channel ||
-        !channel.isTextBased() ||
-        !channel.isSendable() ||
-        channel.type !== ChannelType.GuildText
-      ) {
-        logger.error(
-          `Channel ${status.channelId} not found! Will reattempt next time...`
-        );
-        continue;
+    const res = await axiosInstance.get(
+      `${process.env.CRAFTY_BASE_URL}/api/v2/servers/${status.serverId}/stats`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.CRAFTY_API_KEY}`,
+        },
       }
+    );
 
-      let message = status.messageId
-        ? await channel.messages.fetch(status.messageId)
-        : (await channel.messages.fetch({ limit: 30 }))
-            ?.filter((msg) => msg.author.id === bot.user?.id)
-            .sort((a, b) => b.createdTimestamp - a.createdTimestamp);
+    const server = res.data as ServerStatusGet;
 
-      if (message instanceof Collection) {
-        logger.warn(
-          `[STAT_ID: ${status.id}] Couldn't find the stored message from the database! Attempting to find the newest one in the channel...`
-        );
+    if (server.status !== "ok") {
+      logger.error(
+        `[STAT_ID: ${status.serverId}] Server not found, or an error occurred`
+      );
+      logger.debug(server);
+      continue;
+    }
 
-        if (message.size > 1) {
-          logger.warn(
-            `[STAT_ID: ${status.id}] Found ${message.size} messages by the bot in the channel ${channel.id}. Assuming it is the newest one!`
-          );
-        }
+    const serverStatus = server.data;
 
-        const msg = message.first();
+    // create the db entry
+    const currentStatus = await $client.status.update({
+      where: {
+        serverId: status.serverId,
+      },
+      data: {
+        serverId: serverStatus.server_id.server_id,
+        serverName: serverStatus.server_id.server_name,
+        serverVersion: serverStatus.version.replace(/[^0-9\.]/gm, ""),
+        maintenance: false,
+        playerCounts: {
+          create: {
+            online: serverStatus.running,
+            playerCount: serverStatus.online,
+            players: serverStatus.players,
+            maxPlayers: serverStatus.max,
+          },
+        },
+        updatedAt: new Date(),
+      },
+      include: {
+        playerCounts: {
+          take: 1,
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
+      },
+    });
 
-        if (!msg) {
+    logger.debug(
+      `[STAT_ID: ${status.serverId}] Updated status for ${serverStatus.server_id.server_name} (${serverStatus.server_id.server_id})`
+    );
+
+    if (!status.messages || status.messages.length <= 0) {
+      logger.debug(
+        `[STAT_ID: ${status.serverId}] No messages found for this status!`
+      );
+      continue;
+    }
+
+    for (const messageEmbed of status.messages) {
+      try {
+        const channel = await bot.channels.fetch(messageEmbed.channelId);
+
+        if (
+          !channel ||
+          !channel.isTextBased() ||
+          !channel.isSendable() ||
+          channel.type !== ChannelType.GuildText
+        ) {
           logger.error(
-            `[STAT_ID: ${status.id}] No messages by our bot found in the channel ${channel.id}! Will reattempt next time...`
+            `Channel ${messageEmbed.channelId} not found! Will reattempt next time...`
           );
-          logger.debug(message);
           continue;
         }
 
-        message = msg;
+        let message = messageEmbed.messageId
+          ? await channel.messages.fetch(messageEmbed.messageId)
+          : (await channel.messages.fetch({ limit: 30 }))
+              ?.filter((msg) => msg.author.id === bot.user?.id)
+              .sort((a, b) => b.createdTimestamp - a.createdTimestamp);
 
-        logger.warn(
-          `[STAT_ID: ${status.id}] Replacing the stored message id with the new one found...`
-        );
+        if (message instanceof Collection) {
+          logger.warn(
+            `[STAT_ID: ${status.serverId}] Couldn't find the stored message from the database! Attempting to find the newest one in the channel...`
+          );
 
-        await $client.status.update({
+          if (message.size > 1) {
+            logger.warn(
+              `[STAT_ID: ${status.serverId}] Found ${message.size} messages by the bot in the channel ${channel.id}. Assuming it is the newest one!`
+            );
+          }
+
+          const msg = message.first();
+
+          if (!msg) {
+            logger.error(
+              `[STAT_ID: ${status.serverId}] No messages by our bot found in the channel ${channel.id}! Will reattempt next time...`
+            );
+            logger.debug(message);
+            continue;
+          }
+
+          message = msg;
+
+          logger.warn(
+            `[STAT_ID: ${status.serverId}] Replacing the stored message id with the new one found...`
+          );
+
+          await $client.messageEmbed.update({
+            where: {
+              messageId: messageEmbed.messageId,
+            },
+            data: {
+              messageId: message.id,
+              channelId: message.channelId,
+            },
+          });
+        }
+
+        // get the last 24-hour player count
+        const playerCounts = await $client.playerCount.findMany({
           where: {
-            id: status.id,
+            statusId: status.serverId,
+            createdAt: {
+              gte: new Date(Date.now() - 1000 * 60 * 60 * 24),
+            },
           },
-          data: {
-            messageId: message.id,
+          orderBy: {
+            createdAt: "asc",
           },
         });
-      }
 
-      // now get the server status
-      const res = await axiosInstance.get(
-        `${process.env.CRAFTY_BASE_URL}/api/v2/servers/${status.serverId}/stats`,
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.CRAFTY_API_KEY}`,
-          },
+        // create the chart
+        const chart = await createPlayerCountChart(playerCounts, [
+          messageEmbed.showMaxPlayers,
+          messageEmbed.showMaxPlayers
+            ? currentStatus.playerCounts[0].maxPlayers
+            : -1,
+        ]);
+
+        const embed = await createEmbed(currentStatus);
+
+        if (chart) {
+          embed.setImage(`attachment://player-count-chart.png`);
         }
-      );
 
-      const server = res.data as ServerStatusGet;
+        message.edit({
+          components: [statusEmbedActionRow],
+          embeds: [embed],
+          files: chart
+            ? [{ name: "player-count-chart.png", attachment: chart }]
+            : undefined,
+        });
 
-      if (server.status !== "ok") {
-        logger.error(
-          `[STAT_ID: ${status.id}] Server not found, or an error occurred`
+        logger.debug(
+          `[STAT_ID: ${status.serverId}] Updated embed for https://discord.com/channels/${channel.guildId}/${channel.id}/${message.id}`
         );
-        logger.debug(server);
-        continue;
+      } catch (error) {
+        logger.error(error);
       }
-
-      const serverStatus = server.data;
-
-      // create the db entry
-      const currentStatus = await $client.status.update({
-        where: {
-          id: status.id,
-        },
-        data: {
-          serverId: serverStatus.server_id.server_id,
-          serverName: serverStatus.server_id.server_name,
-          serverVersion: serverStatus.version.replace(/[^0-9\.]/gm, ""),
-          maintenance: false,
-          playerCounts: {
-            create: {
-              online: serverStatus.running,
-              playerCount: serverStatus.online,
-              players: serverStatus.players,
-              maxPlayers: serverStatus.max,
-            },
-          },
-          updatedAt: new Date(),
-        },
-        include: {
-          playerCounts: {
-            take: 1,
-            orderBy: {
-              createdAt: "desc",
-            },
-          },
-        },
-      });
-
-      // get the last 24-hour player count
-      const playerCounts = await $client.playerCount.findMany({
-        where: {
-          statusId: status.id,
-          createdAt: {
-            gte: new Date(Date.now() - 1000 * 60 * 60 * 24),
-          },
-        },
-        orderBy: {
-          createdAt: "asc",
-        },
-      });
-
-      // create the chart
-      const chart = await createPlayerCountChart(playerCounts, [
-        currentStatus.showMaxPlayers,
-        currentStatus.showMaxPlayers
-          ? currentStatus.playerCounts[0].maxPlayers
-          : -1,
-      ]);
-
-      const embed = await createEmbed(currentStatus);
-
-      if (chart) {
-        embed.setImage(`attachment://player-count-chart.png`);
-      }
-
-      message.edit({
-        components: [statusEmbedActionRow],
-        embeds: [embed],
-        files: chart
-          ? [{ name: "player-count-chart.png", attachment: chart }]
-          : undefined,
-      });
-
-      logger.debug(
-        `Updated status for https://discord.com/channels/${channel.guildId}/${channel.id}/${message.id}`
-      );
-    } catch (error) {
-      logger.error(error);
     }
   }
 

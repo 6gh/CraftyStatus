@@ -8,5 +8,6 @@ declare namespace NodeJS {
     CRAFTY_INSECURE_API: "false" | "true";
     CRAFTY_API_KEY: string;
     POSTGRES_URL: string;
+    UPDATE_ORPHANED_STATUS: "false" | "true";
   }
 }

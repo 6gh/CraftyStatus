@@ -24,6 +24,10 @@ services:
 
       # Database
       - POSTGRES_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+
+      # In the scheduler, should we update the statues
+      # which have no messages attached to them?
+      - UPDATE_ORPHANED_STATUS=${UPDATE_ORPHANED_STATUS:-true}
     depends_on:
       db:
         condition: service_healthy

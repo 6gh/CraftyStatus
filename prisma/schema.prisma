@@ -14,18 +14,23 @@ model DiscordUser {
   discordId String   @id
   createdAt DateTime @default(now())
 
-  creationAllowed Boolean @default(true)
-  updateAllowed   Boolean @default(true)
-  deleteAllowed   Boolean @default(true)
+  creationAllowed Boolean @default(false)
+  updateAllowed   Boolean @default(false)
+  deleteAllowed   Boolean @default(false)
+  purgeAllowed    Boolean @default(false)
+}
+
+model MessageEmbed {
+  messageId String   @id
+  channelId String
+  status    Status?  @relation(fields: [statusId], references: [serverId], onDelete: Cascade)
+  statusId  String?
+  showMaxPlayers Boolean       @default(false)
 }
 
 model Status {
-  id             Int           @id @default(autoincrement())
-  channelId      String
-  messageId      String        @unique
-  online         Boolean       @default(false) // DEPRECATED, use PlayerCount.online instead
+  serverId       String        @id
   maintenance    Boolean
-  serverId       String
   serverName     String
   serverVersion  String
   javaIp         String?
@@ -35,13 +40,13 @@ model Status {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   playerCounts   PlayerCount[]
-  showMaxPlayers Boolean       @default(false)
+  messages       MessageEmbed[]
 }
 
 model PlayerCount {
   id          Int      @id @default(autoincrement())
-  status      Status   @relation(fields: [statusId], references: [id], onDelete: Cascade)
-  statusId    Int
+  status      Status   @relation(fields: [statusId], references: [serverId], onDelete: Cascade)
+  statusId    String
   online      Boolean  @default(true)
   playerCount Int
   maxPlayers  Int

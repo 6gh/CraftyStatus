@@ -11,3 +11,6 @@ services:
       - "5555:5555" # Prisma Studio
     healthcheck:
       interval: 3s
+  db:
+    ports:
+      - 5432:5432

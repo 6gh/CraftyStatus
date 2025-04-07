@@ -117,23 +117,27 @@ export default new BotEvent("interactionCreate", async (interaction) => {
     });
 
     try {
-      const status = await $client.status.findUnique({
+      const messageEmbed = await $client.messageEmbed.findUnique({
         where: {
           messageId: interaction.message.id,
         },
         include: {
-          playerCounts: {
-            where: {
-              createdAt: {
-                gte: date,
-                lt: new Date(date.getTime() + 1000 * 60 * 60 * 24), // Add 24 hours to the date
+          status: {
+            include: {
+              playerCounts: {
+                where: {
+                  createdAt: {
+                    gte: date,
+                    lt: new Date(date.getTime() + 1000 * 60 * 60 * 24), // Add 24 hours to the date
+                  },
+                },
               },
             },
           },
         },
       });
 
-      if (!status) {
+      if (!messageEmbed || messageEmbed.status === null) {
         logger.warn(
           `No status found in the channel ${interaction.channelId}, despite the button being here. Possible bug?`
         );
@@ -144,9 +148,11 @@ export default new BotEvent("interactionCreate", async (interaction) => {
         return;
       }
 
+      const status = messageEmbed.status;
+
       logger.debug(
         `Checking Status MESSAGE_ID: ${interaction.message.id} | STAT_ID: ${
-          status.id
+          status.serverId
         } |  Date: ${date.toISOString()}`
       );
 
@@ -159,7 +165,7 @@ export default new BotEvent("interactionCreate", async (interaction) => {
 
       // create the chart
       const chart = await createPlayerCountChart(status.playerCounts, [
-        status.showMaxPlayers,
+        messageEmbed.showMaxPlayers,
         status.playerCounts.sort((a, b) => b.maxPlayers - a.maxPlayers)[0]
           .maxPlayers,
       ]);

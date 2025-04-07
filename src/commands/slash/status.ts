@@ -108,6 +108,26 @@ export default new SlashCommand(
             .setDescription("The message ID of the status embed")
             .setRequired(true)
         )
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("purge")
+        .setDescription("Completely wipe all data related to a server.")
+        .addStringOption((option) =>
+          option
+            .setName("uuid")
+            .setDescription("The UUID of the server found in Crafty Controller")
+            .setRequired(true)
+        )
+        .addStringOption(
+          (option) =>
+            option
+              .setName("confirm")
+              .setDescription(
+                "Type 'confirm deletion of the data' to confirm the purge"
+              )
+              .setRequired(false) // make it optional so people have to type it
+        )
     ),
   async ({ interaction, dbUser }) => {
     if (!interaction.guildId) {
@@ -248,10 +268,11 @@ export default new SlashCommand(
             });
 
             // create the db entry
-            await $client.status.create({
-              data: {
-                channelId: interaction.channelId,
-                messageId: msg.id,
+            await $client.status.upsert({
+              where: {
+                serverId: status.server_id.server_id,
+              },
+              create: {
                 serverId: status.server_id.server_id,
                 serverName,
                 serverVersion,
@@ -259,7 +280,6 @@ export default new SlashCommand(
                 bedrockIp,
                 bedrockPort,
                 maintenance: false,
-                showMaxPlayers,
                 playerCounts: {
                   create: {
                     online: status.running,
@@ -268,12 +288,53 @@ export default new SlashCommand(
                     maxPlayers,
                   },
                 },
+                messages: {
+                  connectOrCreate: {
+                    where: {
+                      messageId: msg.id,
+                    },
+                    create: {
+                      messageId: msg.id,
+                      channelId: msg.channelId,
+                    },
+                  },
+                },
               },
-              include: {
+              update: {
+                serverName,
+                serverVersion,
+                javaIp,
+                bedrockIp,
+                bedrockPort,
+                maintenance: false,
                 playerCounts: {
-                  take: 1,
-                  orderBy: {
-                    createdAt: "desc",
+                  create: {
+                    online: status.running,
+                    playerCount,
+                    players,
+                    maxPlayers,
+                  },
+                },
+                messages: {
+                  connectOrCreate: {
+                    where: {
+                      messageId: msg.id,
+                    },
+                    create: {
+                      messageId: msg.id,
+                      channelId: msg.channelId,
+                      showMaxPlayers,
+                    },
+                  },
+                  update: {
+                    where: {
+                      messageId: msg.id,
+                    },
+                    data: {
+                      messageId: msg.id,
+                      channelId: msg.channelId,
+                      showMaxPlayers,
+                    },
                   },
                 },
               },
@@ -348,31 +409,37 @@ export default new SlashCommand(
           });
 
           try {
-            const dbStatus = await $client.status.findUnique({
+            const dbMessage = await $client.messageEmbed.findUnique({
               where: {
                 messageId: messageId.value.toString(),
               },
               include: {
-                playerCounts: {
-                  where: {
-                    createdAt: {
-                      gte: new Date(Date.now() - 1000 * 60 * 60 * 24), // last 24h
+                status: {
+                  include: {
+                    playerCounts: {
+                      where: {
+                        createdAt: {
+                          gte: new Date(Date.now() - 1000 * 60 * 60 * 24), // last 24h
+                        },
+                      },
                     },
                   },
                 },
               },
             });
 
-            if (!dbStatus) {
+            if (!dbMessage || dbMessage.status === null) {
               await interaction.editReply({
                 content: "Status embed not found",
               });
               return;
             }
 
+            const dbStatus = dbMessage.status;
+
             showMaxPlayers = showMaxPlayers?.value
               ? showMaxPlayers.value === true
-              : dbStatus.showMaxPlayers;
+              : dbMessage.showMaxPlayers;
 
             // get the server data
             const res = await axiosInstance.get(
@@ -447,18 +514,18 @@ export default new SlashCommand(
             }
 
             const channel = await interaction.client.channels.fetch(
-              dbStatus.channelId
+              dbMessage.channelId
             );
 
             if (!channel || !channel.isSendable()) {
               throw new Error("Channel not found");
             }
 
-            let msg = await channel.messages.fetch(dbStatus.messageId);
+            let msg = await channel.messages.fetch(dbMessage.messageId);
 
             if (moveTo?.value) {
               logger.debug(
-                `Moving status (STAT_ID: ${dbStatus.id}) embed to ${moveTo.value} (${moveTo.channel?.name})`
+                `Moving status (STAT_ID: ${dbStatus.serverId}) embed (MSG_ID: ${dbMessage.messageId}) to CHANNEL_ID: ${moveTo.value} (${moveTo.channel?.name})`
               );
               const newChannel = await interaction.client.channels.fetch(
                 moveTo.value.toString()
@@ -495,8 +562,9 @@ export default new SlashCommand(
             } else if (!msg) {
               logger.warn("Message not found. Creating new message");
               const channel =
-                (await interaction.client.channels.fetch(dbStatus.channelId)) ||
-                interaction.channel;
+                (await interaction.client.channels.fetch(
+                  dbMessage.channelId
+                )) || interaction.channel;
 
               if (!channel || !channel.isSendable()) {
                 throw new Error("Channel not found");
@@ -520,28 +588,32 @@ export default new SlashCommand(
             }
 
             // create the db entry
-            await $client.status.update({
+            await $client.messageEmbed.update({
               where: {
-                messageId: dbStatus.messageId,
+                messageId: dbMessage.messageId,
               },
               data: {
                 channelId: msg.channelId,
                 messageId: msg.id,
-                serverName,
-                serverVersion,
-                javaIp,
-                bedrockIp,
-                bedrockPort,
-                maintenance: false,
-                playerCounts: {
-                  create: {
-                    online: status.running,
-                    playerCount,
-                    players,
-                    maxPlayers,
+                showMaxPlayers,
+                status: {
+                  update: {
+                    serverName,
+                    serverVersion,
+                    javaIp,
+                    bedrockIp,
+                    bedrockPort,
+                    maintenance: false,
+                    playerCounts: {
+                      create: {
+                        online: status.running,
+                        playerCount,
+                        players,
+                        maxPlayers,
+                      },
+                    },
                   },
                 },
-                showMaxPlayers,
               },
             });
 
@@ -590,110 +662,164 @@ export default new SlashCommand(
             return;
           }
 
-          try {
-            // we want to confirm the deletion, since this will delete all previous data
-            const confirmationMessage = await interaction.reply({
-              content: `<@${interaction.user.id}>, are you sure you want to delete this status embed? **ALL PLAYER DATA WILL BE LOST**`,
-              withResponse: true,
-              components: [
-                new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-                  [
-                    new ButtonBuilder()
-                      .setCustomId("confirm-delete")
-                      .setLabel("Confirm")
-                      .setStyle(ButtonStyle.Danger),
-                    new ButtonBuilder()
-                      .setCustomId("cancel-delete")
-                      .setLabel("Cancel")
-                      .setStyle(ButtonStyle.Success),
-                  ]
-                ),
-              ],
+          const dbMessage = await $client.messageEmbed.findUnique({
+            where: {
+              messageId: messageId.value.toString(),
+            },
+          });
+
+          if (!dbMessage) {
+            await interaction.reply({
+              content: "Status embed not found",
+              components: [],
             });
+            return;
+          }
 
-            if (
-              !confirmationMessage ||
-              !confirmationMessage.resource?.message
-            ) {
-              logger.warn(
-                "Status deletion confirmation message not found, or not sent. To prevent accidental deletion, will not continue."
-              );
-              await interaction.deleteReply();
-              return;
-            }
+          // delete the message
+          const channel = await interaction.client.channels.fetch(
+            dbMessage.channelId
+          );
+          if (!channel || !channel.isSendable()) {
+            throw new Error("Channel not found");
+          }
 
-            const answer =
-              await confirmationMessage.resource.message.awaitMessageComponent({
-                componentType: ComponentType.Button,
-                time: 60_000, // 1 minute
-                filter: (i) => i.user.id === interaction.user.id,
-              });
+          const msg = await channel.messages.fetch(dbMessage.messageId);
+          if (!msg) {
+            await interaction.reply({
+              content: "Status embed not found",
+            });
+            return;
+          }
 
-            if (answer.customId === "cancel-delete") {
-              await interaction.deleteReply();
-              return;
-            } else if (answer.customId === "confirm-delete") {
-              const dbStatus = await $client.status.findUnique({
-                where: {
-                  messageId: messageId.value.toString(),
-                },
-              });
+          await msg.delete();
 
-              if (!dbStatus) {
-                await interaction.editReply({
-                  content: "Status embed not found",
-                  components: [],
-                });
-                return;
-              }
+          // delete from the database
+          await $client.messageEmbed.delete({
+            where: {
+              messageId: dbMessage.messageId,
+            },
+          });
 
-              // delete the status
-              await $client.status.delete({
-                where: {
-                  messageId: messageId.value.toString(),
-                },
-                include: {
-                  playerCounts: true,
-                },
-              });
+          await interaction.reply({
+            content: "Status embed deleted",
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+        break;
 
-              // delete the message
+      case "purge":
+        {
+          if (!dbUser) {
+            await interaction.reply({
+              content: "You do not have access to this command",
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          if (!dbUser.purgeAllowed) {
+            await interaction.reply({
+              content: "You do not have permission to purge a status embed",
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          const uuid = interaction.options.get("uuid")?.value?.toString();
+          const confirm = interaction.options.get("confirm")?.value?.toString();
+
+          if (!uuid) {
+            await interaction.reply({
+              content: "No UUID provided",
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          const dbStatus = await $client.status.findUnique({
+            where: {
+              serverId: uuid,
+            },
+            include: {
+              messages: true,
+            },
+          });
+
+          if (!dbStatus) {
+            await interaction.reply({
+              content: "Status not found",
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          if (confirm !== "confirm deletion of the data") {
+            // doing this just to make it look better
+            const confirmMsgArray = [];
+            confirmMsgArray.push("# :warning: WARNING :warning:");
+            confirmMsgArray.push(
+              `This will completely **remove all data related to __${dbStatus.serverName}__ PERMANENTLY from this bot _(not Crafty Controller)_**!!`
+            );
+            confirmMsgArray.push(
+              "This means that the collected player counts will be lost, all messages showing this server status will be deleted, and this data will become **irrecoverable**."
+            );
+            confirmMsgArray.push("");
+            confirmMsgArray.push(
+              "If you meant to only delete one message, use `/crafty delete` instead!!"
+            );
+            confirmMsgArray.push("");
+            confirmMsgArray.push(
+              "**To continue, rerun this command with the parameter `confirm` set to `confirm deletion of the data`.**"
+            );
+
+            await interaction.reply({
+              content: confirmMsgArray.join("\n"),
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          // delete the messages
+          const messages = dbStatus.messages;
+
+          if (messages.length > 0) {
+            for (const message of messages) {
               const channel = await interaction.client.channels.fetch(
-                dbStatus.channelId
+                message.channelId
               );
               if (!channel || !channel.isSendable()) {
                 throw new Error("Channel not found");
               }
 
-              const msg = await channel.messages.fetch(dbStatus.messageId);
-              if (!msg) {
-                await interaction.editReply({
-                  content: "Status embed not found",
-                });
-                return;
+              const msg = await channel.messages.fetch(message.messageId);
+              if (!msg || !msg.deletable) {
+                continue;
               }
 
-              await msg.delete();
-              await interaction.editReply({
-                content: "Status embed deleted",
-                components: [],
-              });
-            } else {
-              logger.debug(answer.customId + " is an unknown option");
-              await interaction.editReply({
-                content: "Status embed deletion cancelled",
-                components: [],
-              });
-              return;
+              try {
+                await msg.delete();
+              } catch (error) {
+                logger.error(
+                  `(STAT_ID: ${dbStatus.serverId}) Failed to delete message ${msg.id} in channel ${channel.id}`
+                );
+                logger.error(error);
+                continue;
+              }
             }
-          } catch (error) {
-            logger.error(error);
-            await interaction.followUp({
-              content: "Failed to delete status",
-              flags: MessageFlags.Ephemeral,
-            });
-            return;
           }
+
+          // delete the status
+          await $client.status.delete({
+            where: {
+              serverId: uuid,
+            },
+          });
+
+          await interaction.reply({
+            content: `Status for server ${dbStatus.serverName} purged`,
+            flags: MessageFlags.Ephemeral,
+          });
         }
         break;
 
