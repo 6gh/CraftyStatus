@@ -1,7 +1,14 @@
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   CacheType,
+  ChannelType,
   CommandInteractionOption,
+  ComponentType,
   EmbedBuilder,
+  Message,
+  MessageActionRowComponentBuilder,
   MessageFlags,
   SlashCommandBuilder,
 } from "discord.js";
@@ -22,7 +29,9 @@ export default new SlashCommand(
     .addSubcommand((subcommand) =>
       subcommand
         .setName("create")
-        .setDescription("Create a new status embed for a server")
+        .setDescription(
+          "Create a new status embed for a server in this channel"
+        )
         .addStringOption((option) =>
           option
             .setName("uuid")
@@ -83,6 +92,24 @@ export default new SlashCommand(
               "True: shows max players; False: y-axis shows max from last 24h. Default: false."
             )
             .setRequired(false)
+        )
+        .addChannelOption((option) =>
+          option
+            .setName("move-to")
+            .setDescription("Move the status embed to another channel")
+            .setRequired(false)
+            .addChannelTypes(ChannelType.GuildText)
+        )
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("delete")
+        .setDescription("Delete an existing status embed")
+        .addStringOption((option) =>
+          option
+            .setName("message-id")
+            .setDescription("The message ID of the status embed")
+            .setRequired(true)
         )
     ),
   async ({ interaction, dbUser }) => {
@@ -287,6 +314,7 @@ export default new SlashCommand(
           "bedrock-ip",
           false
         );
+        const moveTo = interaction.options.get("move-to", false);
         let showMaxPlayers:
           | CommandInteractionOption<CacheType>
           | null
@@ -300,7 +328,11 @@ export default new SlashCommand(
           return;
         }
 
-        if (!userProvidedJavaIp?.value && showMaxPlayers?.value === undefined) {
+        if (
+          !userProvidedJavaIp?.value &&
+          showMaxPlayers?.value === undefined &&
+          moveTo?.value === undefined
+        ) {
           await interaction.reply({
             content: "No options provided. Updating not necessary",
             flags: MessageFlags.Ephemeral,
@@ -419,11 +451,55 @@ export default new SlashCommand(
             throw new Error("Channel not found");
           }
 
-          const msg = await channel.messages.fetch(dbStatus.messageId);
+          let msg = await channel.messages.fetch(dbStatus.messageId);
 
-          if (!msg) {
+          if (moveTo?.value) {
+            logger.debug(
+              `Moving status (STAT_ID: ${dbStatus.id}) embed to ${moveTo.value} (${moveTo.channel?.name})`
+            );
+            const newChannel = await interaction.client.channels.fetch(
+              moveTo.value.toString()
+            );
+
+            if (!newChannel || !newChannel.isSendable()) {
+              await interaction.editReply({
+                content:
+                  "Channel not found. Please make sure I can see it, and I can send messages in it.",
+              });
+              return;
+            }
+
+            let newMsg: Message<false> | Message<true> | null = null;
+
+            try {
+              newMsg = await newChannel.send({
+                components: [statusEmbedActionRow],
+                embeds: [embed],
+                files: chart
+                  ? [{ name: "player-count-chart.png", attachment: chart }]
+                  : undefined,
+              });
+            } catch (error) {
+              logger.error(error);
+              await interaction.editReply({
+                content: "Failed to send message in new channel",
+              });
+              return;
+            }
+
+            await msg.delete();
+            msg = newMsg;
+          } else if (!msg) {
             logger.warn("Message not found. Creating new message");
-            await interaction.channel.send({
+            const channel =
+              (await interaction.client.channels.fetch(dbStatus.channelId)) ||
+              interaction.channel;
+
+            if (!channel || !channel.isSendable()) {
+              throw new Error("Channel not found");
+            }
+
+            msg = await channel.send({
               components: [statusEmbedActionRow],
               embeds: [embed],
               files: chart
@@ -446,6 +522,8 @@ export default new SlashCommand(
               messageId: dbStatus.messageId,
             },
             data: {
+              channelId: msg.channelId,
+              messageId: msg.id,
               serverName,
               serverVersion,
               javaIp,
@@ -465,9 +543,10 @@ export default new SlashCommand(
           });
 
           await interaction.editReply({
-            content: msg
-              ? "Status embed updated"
-              : "Original status embed could not be found. A new status embed was created",
+            content:
+              msg || moveTo?.value
+                ? "Status embed updated"
+                : "Original status embed could not be found. A new status embed was created",
           });
         } catch (error) {
           logger.error(error);
@@ -477,6 +556,137 @@ export default new SlashCommand(
           });
         }
         break;
+      }
+
+      case "delete": {
+        if (!dbUser) {
+          await interaction.reply({
+            content: "You do not have access to this command",
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        if (!dbUser.deleteAllowed) {
+          await interaction.reply({
+            content: "You do not have permission to delete a status embed",
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        // get the options provided
+        const messageId = interaction.options.get("message-id");
+
+        if (!messageId?.value) {
+          await interaction.reply({
+            content: "No message ID provided",
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        try {
+          // we want to confirm the deletion, since this will delete all previous data
+          const confirmationMessage = await interaction.reply({
+            content: `<@${interaction.user.id}>, are you sure you want to delete this status embed? **ALL PLAYER DATA WILL BE LOST**`,
+            withResponse: true,
+            components: [
+              new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+                [
+                  new ButtonBuilder()
+                    .setCustomId("confirm-delete")
+                    .setLabel("Confirm")
+                    .setStyle(ButtonStyle.Danger),
+                  new ButtonBuilder()
+                    .setCustomId("cancel-delete")
+                    .setLabel("Cancel")
+                    .setStyle(ButtonStyle.Success),
+                ]
+              ),
+            ],
+          });
+
+          if (!confirmationMessage || !confirmationMessage.resource?.message) {
+            logger.warn(
+              "Status deletion confirmation message not found, or not sent. To prevent accidental deletion, will not continue."
+            );
+            await interaction.deleteReply();
+            return;
+          }
+
+          const answer =
+            await confirmationMessage.resource.message.awaitMessageComponent({
+              componentType: ComponentType.Button,
+              time: 60_000, // 1 minute
+              filter: (i) => i.user.id === interaction.user.id,
+            });
+
+          if (answer.customId === "cancel-delete") {
+            await interaction.deleteReply();
+            return;
+          } else if (answer.customId === "confirm-delete") {
+            const dbStatus = await $client.status.findUnique({
+              where: {
+                messageId: messageId.value.toString(),
+              },
+            });
+
+            if (!dbStatus) {
+              await interaction.editReply({
+                content: "Status embed not found",
+                components: [],
+              });
+              return;
+            }
+
+            // delete the status
+            await $client.status.delete({
+              where: {
+                messageId: messageId.value.toString(),
+              },
+              include: {
+                playerCounts: true,
+              },
+            });
+
+            // delete the message
+            const channel = await interaction.client.channels.fetch(
+              dbStatus.channelId
+            );
+            if (!channel || !channel.isSendable()) {
+              throw new Error("Channel not found");
+            }
+
+            const msg = await channel.messages.fetch(dbStatus.messageId);
+            if (!msg) {
+              await interaction.editReply({
+                content: "Status embed not found",
+              });
+              return;
+            }
+
+            await msg.delete();
+            await interaction.editReply({
+              content: "Status embed deleted",
+              components: [],
+            });
+          } else {
+            logger.debug(answer.customId + " is an unknown option");
+            await interaction.editReply({
+              content: "Status embed deletion cancelled",
+              components: [],
+            });
+            return;
+          }
+        } catch (error) {
+          logger.error(error);
+          await interaction.followUp({
+            content: "Failed to delete status",
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
       }
 
       default: {
