@@ -42,7 +42,7 @@ export default new BotEvent("interactionCreate", async (interaction) => {
   if (
     interaction.isModalSubmit() &&
     interaction.customId === "anotherDayModal" &&
-    interaction.channelId
+    interaction.isFromMessage()
   ) {
     const inputDate = interaction.fields.getTextInputValue("date");
 
@@ -117,9 +117,9 @@ export default new BotEvent("interactionCreate", async (interaction) => {
     });
 
     try {
-      const status = await $client.status.findFirst({
+      const status = await $client.status.findUnique({
         where: {
-          channelId: interaction.channelId,
+          messageId: interaction.message.id,
         },
         include: {
           playerCounts: {
@@ -145,7 +145,9 @@ export default new BotEvent("interactionCreate", async (interaction) => {
       }
 
       logger.debug(
-        `Checking Status (STAT_ID: ${status.id}) Date: ${date.toISOString()}`
+        `Checking Status MESSAGE_ID: ${interaction.message.id} | STAT_ID: ${
+          status.id
+        } |  Date: ${date.toISOString()}`
       );
 
       if (status.playerCounts.length <= 0) {
