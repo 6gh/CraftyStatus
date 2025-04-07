@@ -5,6 +5,6 @@ export const parseJson = <T>(jsonString: string): T | null => {
       .replace(/'/g, '"')
       // Replace True/False with true/false
       // Fixes SyntaxError: Unexpected token 'F', "False" is not valid JSON
-      .replace(/[^"](True)|(False)[^"]/gm, (match) => match.toLowerCase())
+      .replace(/[^"]?(True)|(False)[^"]?/gm, (match) => match.toLowerCase())
   );
 };

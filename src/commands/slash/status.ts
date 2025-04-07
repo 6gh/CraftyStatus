@@ -156,8 +156,12 @@ export default new SlashCommand(
           const uuid = interaction.options.get("uuid");
           const javaip = interaction.options.get("java-ip", false);
           const bedrockip = interaction.options.get("bedrock-ip", false);
-          const showMaxPlayers =
-            interaction.options.get("show-max-players", false)?.value === true;
+          let showMaxPlayers = interaction.options.get(
+            "show-max-players",
+            false
+          )?.value
+            ? interaction.options.get("show-max-players", false)?.value === true
+            : false;
 
           if (!uuid) {
             await interaction.reply({
@@ -687,6 +691,8 @@ export default new SlashCommand(
           });
           return;
         }
+
+        break;
       }
 
       default: {

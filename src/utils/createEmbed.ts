@@ -80,20 +80,29 @@ export const createEmbed = async (
 
   // logger.debug(currentStatus.playerCounts[0].players.replace(/'/g, '"'));
 
-  let playerList: string[] | string;
+  let playerList: string[];
 
   if (statusDateTaken) {
     // get a list of players online at any given time on this day
     let combinedPlayerList: Set<string> = new Set();
 
     for (let playerCount of currentStatus.playerCounts) {
-      const currentPlayerList = parseJson<string[]>(playerCount.players); // "['player1', 'player2', 'player3']" -> ["player1", "player2", "player3"]
+      const currentPlayerList = parseJson<string[] | boolean>(
+        playerCount.players
+      ); // "['player1', 'player2', 'player3']" -> ["player1", "player2", "player3"]
 
-      if (!currentPlayerList) {
-        logger.debug(
-          "[createEmbed;statusDateTaken] Possibly failed to parse player list? currentPlayerList is null"
+      if (
+        !Array.isArray(currentPlayerList) &&
+        typeof currentPlayerList !== "boolean"
+      ) {
+        logger.warn(
+          "[createEmbed;statusDateTaken] Possibly failed to parse player list? currentPlayerList is unknown type"
         );
         logger.debug(playerCount.players);
+        continue;
+      }
+
+      if (typeof currentPlayerList === "boolean") {
         continue;
       }
 
@@ -102,28 +111,44 @@ export const createEmbed = async (
 
     playerList = Array.from(combinedPlayerList);
   } else {
-    const currentPlayerList = parseJson<string[]>(
+    let currentPlayerList = parseJson<string[] | boolean>(
       currentStatus.playerCounts[0].players
     );
 
-    if (!currentPlayerList) {
-      logger.debug(
-        "[createEmbed] Possibly failed to parse player list? currentPlayerList is null"
+    if (
+      !Array.isArray(currentPlayerList) &&
+      typeof currentPlayerList !== "boolean"
+    ) {
+      logger.warn(
+        "[createEmbed] Possibly failed to parse player list? currentPlayerList is unknown type"
       );
-      logger.debug(currentStatus.playerCounts[0].players);
+      logger.debug(currentPlayerList);
+      currentPlayerList = [];
+    }
+
+    if (typeof currentPlayerList === "boolean") {
+      currentPlayerList = [];
     }
 
     playerList = currentPlayerList ?? [];
   }
 
-  playerList = playerList.map((player) => player.replace(/"/g, ""));
-  // logger.debug(playerList);
+  if (!Array.isArray(playerList)) {
+    logger.debug("[createEmbed] playerList is not an array?");
+    logger.debug(playerList);
+    playerList = [];
+  }
 
-  playerList = playerList.map((player) => player.replace(/^\./g, ""));
-  // logger.debug(playerList);
+  if (playerList.length > 0) {
+    playerList = playerList.map((player) => player.replace(/"/g, ""));
+    // logger.debug(playerList);
 
-  playerList = playerList.sort((a, b) => a.localeCompare(b));
-  // logger.debug(playerList);
+    playerList = playerList.map((player) => player.replace(/^\./g, ""));
+    // logger.debug(playerList);
+
+    playerList = playerList.sort((a, b) => a.localeCompare(b));
+    // logger.debug(playerList);
+  }
 
   embed.addFields([
     {
